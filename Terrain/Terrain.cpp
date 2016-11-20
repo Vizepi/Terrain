@@ -183,3 +183,88 @@ double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePo
 			squarePositionX *		squarePositionY *		buffer[Index(squareIndexI + 1, squareIndexJ + 1)] +
 			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
 }
+
+//
+// Simulator
+void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSpeed)
+{
+    //
+    // First generation
+    for(uint i = 0; i < m_resolution; ++i)
+    {
+        for(uint j = 0; j < m_resolution; ++j)
+        {
+            //
+            // For the eight direction, compute the slope of the position
+            double maxSlope = -1000;
+            for(uint x = -1; x < 1; ++x)
+            {
+                for(uint y = -1; y < 1; ++y)
+                {
+                    double slope = abs(Height(Vector2(i+x, j+y) - Vector2(i, j)));
+                    maxSlope = std::max(slope, maxSlope);
+                }
+            }
+
+            //
+            // Compute the dirt level on this point
+            double dirtLevel = maxDirtLevel - ((maxSlope/maxSlopeForDirt) * maxDirtLevel);
+            dirtLevel = std::max(0.0, dirtLevel);
+            m_bufferDirt[Index(i, j)] = dirtLevel;
+        }
+    }
+
+    //
+    // Simulation loop
+    for(int nPass = 0; nPass < passCount; nPass++)
+    {
+        //
+        // Drop a new rock
+
+        //
+        // Choose a random position
+        int x = std::rand() % m_resolution;
+        int y = std::rand() % m_resolution;
+        //
+        // Compute the level of rock falling
+        // TODO change
+        double fallingRock = (double)(std::rand() % ((int)maxDrop - (int)minDrop)) + minDrop;
+
+        double speed = 1.0f;
+        bool stoped = false;
+        while(!stoped)
+        {
+            //
+            // Compute the new position
+            double maxSlope = -1000;
+            int newX = -1;
+            int newY = -1;
+            for(uint crtX = -1; x < 1; ++crtX)
+            {
+                for(uint crtY = -1; y < 1; ++crtY)
+                {
+                    double slope = abs(Height(Vector2(x+crtX, y+crtY) - Vector2(x, y)));
+                    if(slope > maxSlope)
+                    {
+                        newX = x + crtX;
+                        newY = y + crtY;
+                    }
+                }
+            }
+            //
+            // TODO Compute the new speed
+
+            //
+            //Check the stopping state
+            if(speed <= stoppingSpeed)
+            {
+                stoped = true;
+            }
+            else
+            {
+                x = newX;
+                y = newY;
+            }
+        }
+    }
+}

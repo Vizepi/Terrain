@@ -17,7 +17,12 @@ public:
 	bool			ExportIMG	(const std::string& filename, bool doublePrecision);
 
 	void			Carve	(double* height, double* mask, uint64_t resolution, const Vector2& position);
-	void			Erode	(uint64_t passCount);
+    void			Erode	(uint64_t passCount
+                             , double maxSlopeForDirt
+                             , double maxDirtLevel
+                             , double minDrop
+                             , double maxDrop
+                             , double stoppingSpeed);
 
 	inline uint64_t	Index	(uint64_t x, uint64_t y) { return x * m_resolution + y; }
 	double			Height	(const Vector2& position);
