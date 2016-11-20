@@ -62,24 +62,27 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 {
 	std::ofstream file(filename, std::ios::out);
+	file << "o terrain\ng height_map\n";
 	if(file.is_open())
 	{
 		for(uint64_t j = 0; j < m_resolution; ++j)
 		{
 			for(uint64_t i = 0; i < m_resolution; ++i)
 			{
-				Vector3 p = Point3(i, j);
-				file << "v " << p.X() << " " << p.Y() << " " << p.Z() << "\n";
+				Vector2 p = Point2(i, j);
+				uint64_t index = Index(i, j);
+				file << "v " << p.X() << " " << p.Y() << " " <<
+						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
 			}
 		}
-		for(uint64_t j = 0; j < m_resolution - 1; ++j)
+		for(uint64_t j = 1; j < m_resolution; ++j)
 		{
-			for(uint64_t i = 0; i < m_resolution - 1; ++i)
+			for(uint64_t i = 1; i < m_resolution; ++i)
 			{
-				uint64_t a = i + j * m_resolution + 1;
-				uint64_t b = a + m_resolution;
-				uint64_t c = b + 1;
-				uint64_t d = a + 1;
+				uint64_t a = i + j * m_resolution - m_resolution;
+				uint64_t b = i + j * m_resolution + 1 - m_resolution;
+				uint64_t c = i + 1 + (j + 1) * m_resolution - m_resolution;
+				uint64_t d = i + (j + 1) * m_resolution - m_resolution;
 				if(exportNormals)
 				{
 					file << "f " << a << "//" << a
