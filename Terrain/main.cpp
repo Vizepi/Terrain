@@ -1,6 +1,3 @@
-#include "MainWindow.h"
-#include <QApplication>
-
 #include "Terrain.h"
 
 int main(int argc, char *argv[])

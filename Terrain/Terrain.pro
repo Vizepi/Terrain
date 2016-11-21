@@ -14,13 +14,12 @@ TEMPLATE = app
 
 
 SOURCES += main.cpp\
-        MainWindow.cpp \
     Terrain.cpp \
     TerrainBuilder.inl \
     Perlin.cpp \
     Matrix.inl
 
-HEADERS  += MainWindow.h \
+HEADERS  += \
     Terrain.h \
     TerrainBuilder.h \
     Vector.h \
