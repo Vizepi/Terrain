@@ -18,6 +18,7 @@ public:
 
 	void			Carve	(double* height, double* mask, uint64_t resolution, const Vector2& position);
 	void			Erode	(uint64_t passCount);
+	void			Ridge	(const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed = 1);
 
 	inline uint64_t	Index	(uint64_t x, uint64_t y) { return x * m_resolution + y; }
 	double			Height	(const Vector2& position);
