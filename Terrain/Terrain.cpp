@@ -6,9 +6,12 @@
 #include <cmath>
 #include "PI.h"
 #include <fstream>
+#include <iostream>
 
 #include <QImage>
 #include <QVector>
+
+#define VERBOSE(msg) if(m_verbose) { std::cout << msg << std::endl; }
 
 /**
  * @brief Create a terrain given parameters.
@@ -17,13 +20,15 @@
  * @param aabb Bounding box that contains the terrain.
  * @param seed A number to seed the perlin permutation shuffle.
  */
-Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3& aabb, uint64_t seed)
+Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3& aabb, uint64_t seed, bool verbose)
 	: m_resolution(resolution)
 	, m_bufferRock(nullptr)
 	, m_bufferDirt(nullptr)
 	, m_gradient(nullptr)
 	, m_aabb(aabb)
+	, m_verbose(verbose)
 {
+	VERBOSE("Generating terrain")
 	if(resolution > 0)
 	{
 		uint64_t size = resolution * resolution;
@@ -41,7 +46,6 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 			builder.GetOctave(octave, frequency, amplitude, offset, rotation);
 			height += amplitude;
 		}
-
 		for(uint64_t j = 0; j < m_resolution; ++j)
 		{
 			for(uint64_t i = 0; i < m_resolution; ++i)
@@ -74,6 +78,7 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
  */
 bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 {
+	VERBOSE("Exporting OBJ")
 	std::ofstream file(filename, std::ios::out);
 	file << "o terrain\ng height_map\n";
 	if(file.is_open())
@@ -129,6 +134,7 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
  */
 bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 {
+	VERBOSE("Exporting image")
 	QImage* rock = nullptr;
 	QImage* dirt = nullptr;
 	if(doublePrecision)
@@ -234,7 +240,7 @@ double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePo
 			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
 }
 
-double Terrain::getMaxSlope(const Vector2& crtPos, Vector2* nextPos)
+double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
 {
     //
     // For the eight direction, compute the slope of the position
@@ -275,6 +281,7 @@ double Terrain::getMaxSlope(const Vector2& crtPos, Vector2* nextPos)
  */
 void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
 {
+	VERBOSE("Eroding terrain")
     //
     // First generation
     Vector2* tmpVec2 = new Vector2();
@@ -284,7 +291,7 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
         {
             //
             // For the eight direction, compute the slope of the position
-            double maxSlope = getMaxSlope(Vector2(i, j), tmpVec2);
+			double maxSlope = GetMaxSlope(Vector2(i, j), tmpVec2);
 
             //
             // Compute the dirt level on this point
@@ -320,7 +327,7 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
         {
             //
             // Compute the new position
-            double slope = getMaxSlope(Vector2(x, y), tmpVec2);
+			double slope = GetMaxSlope(Vector2(x, y), tmpVec2);
 
             //
             //Check the stopping state
@@ -339,6 +346,7 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
 
 void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed)
 {
+	VERBOSE("Adding ridge")
 	Perlin perlin(seed);
 	double frequency = 0.0, amplitude = 0.0, rotation = 0.0;
 	Vector2 offset;
@@ -349,7 +357,6 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude, uint
 		builder.GetOctave(octave, frequency, amplitude, offset, rotation);
 		height += amplitude;
 	}
-
 	for(uint64_t j = 0; j < m_resolution; ++j)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)

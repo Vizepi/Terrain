@@ -18,14 +18,10 @@ int main(int argc, char *argv[])
 	ridge.SetOctave(2, 1.0/1000.0,		50,		Vector2(0.0, 0.0), 10.0);
 	ridge.SetOctave(3, 1.0/100.0,		5,		Vector2(0.0, 0.0), 0.0);
 
-	Terrain t(builder, 1000, AABB3(Vector3(-5000, -5000, 0), Vector3(5000, 5000, 1500)), 1);
+	Terrain t(builder, 1000, AABB3(Vector3(-5000, -5000, 0), Vector3(5000, 5000, 1500)), 1, true);
 	t.Ridge(ridge, Vector2(1250, 750));
 	t.ExportOBJ("Output/Terrain.obj", false);
 	t.ExportIMG("Output/Terrain.png", false);
 
-	QApplication a(argc, argv);
-	MainWindow w;
-	w.show();
-
-	return a.exec();
+	return 0;
 }
