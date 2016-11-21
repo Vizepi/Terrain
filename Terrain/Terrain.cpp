@@ -10,6 +10,13 @@
 #include <QImage>
 #include <QVector>
 
+/**
+ * @brief Create a terrain given parameters.
+ * @param builder A set of octave parameters for perlin generation.
+ * @param resolution Dimension of the terrain height matrix.
+ * @param aabb Bounding box that contains the terrain.
+ * @param seed A number to seed the perlin permutation shuffle.
+ */
 Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3& aabb, uint64_t seed)
 	: m_resolution(resolution)
 	, m_bufferRock(nullptr)
@@ -59,6 +66,12 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 
 }
 
+/**
+ * @brief Export the terrain in a .obj file.
+ * @param filename Name of the obj file in which to export terrain.
+ * @param exportNormals Set to true to export normals in the .obj.
+ * @return On success, returns true. If the file cannot be open, returns false.
+ */
 bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 {
 	std::ofstream file(filename, std::ios::out);
@@ -69,10 +82,12 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 		{
 			for(uint64_t i = 0; i < m_resolution; ++i)
 			{
-				Vector2 p = Point2(i, j);
+				/*Vector2 p = Point2(i, j);
 				uint64_t index = Index(i, j);
 				file << "v " << p.X() << " " << p.Y() << " " <<
-						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
+						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";*/
+				Vector3 p = Point3(i, j);
+				file << "v " << p.X() << " " << p.Y() << " " << p.Z() << "\n";
 			}
 		}
 		for(uint64_t j = 1; j < m_resolution; ++j)
@@ -105,6 +120,15 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 	return false;
 }
 
+/**
+ * @brief Export an image of the terrain.
+ * Function generate images ***_dirt.*** and ***_rock.***. Each image contains
+ * one of the two layers of the terrain. For example, if filename is "Terrain.png",
+ * function generate images Terrain_dirt.png and Terrain_rock.png.
+ * @param filename Name of the image.
+ * @param doublePrecision If set, generate a 16-bits per pixels image, otherwise a 8-bits per pixels image.
+ * @return If images can be saved,returns true, otherwise returns false.
+ */
 bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 {
 	QImage* rock = nullptr;
@@ -148,7 +172,11 @@ bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 	return success;
 }
 
-#include <iostream>
+/**
+ * @brief Get the height of the terrain at a given position.
+ * @param position Position where to get the height.
+ * @return Height of the terrain at the given position or 0.0 if position is out of the terrain space.
+ */
 double Terrain::Height(const Vector2& position)
 {
 	double deltaX = m_aabb.Size().X();
@@ -164,25 +192,143 @@ double Terrain::Height(const Vector2& position)
 	uint64_t i = u * m_resolution;
 	uint64_t j = v * m_resolution;
 	double cu = ((position.X() - m_aabb.A().X()) - ((i * deltaX) / (m_resolution - 1))) / (deltaX / (m_resolution - 1));
-	double cv = ((position.Y() - m_aabb.A().Y()) - ((i * deltaY) / (m_resolution - 1))) / (deltaY / (m_resolution - 1));
+	double cv = ((position.Y() - m_aabb.A().Y()) - ((j * deltaY) / (m_resolution - 1))) / (deltaY / (m_resolution - 1));
 	return (Bilinear(m_bufferRock, cu, cv, i, j) + Bilinear(m_bufferDirt, cu, cv, i, j)) * m_aabb.Size().Z() + m_aabb.A().Z();
 }
 
+/**
+ * @brief Get the position at a given index of the matrix.
+ * @param x The column of the matrix.
+ * @param y The line of the matrix.
+ * @return A vector containing position at the given index.
+ */
 Vector2 Terrain::Point2(uint64_t x, uint64_t y)
 {
 	return Vector2((double(x) * m_aabb.Size().X() / double(m_resolution)) + m_aabb.A().X(), (double(y) * m_aabb.Size().Y()/ double(m_resolution)) + m_aabb.A().Y());
 }
 
+/**
+ * @brief Get the position of the terrain at a given index of the matrix.
+ * @param x The column of the matrix.
+ * @param y The line of the matrix.
+ * @return A vector containing position and altitude at the given index.
+ */
 Vector3 Terrain::Point3(uint64_t x, uint64_t y)
 {
 	Vector2 p = Point2(x, y);
 	return Vector3(p.X(), p.Y(), Height(p));
 }
 
+/**
+ * @brief Compute the bilinear interpolation of a point in a quad.
+ * @param buffer The buffer in which to take the quad.
+ * @param squarePositionX The position X in the quad.
+ * @param squarePositionY The position Y in the quad.
+ * @param squareIndexI The index I of the quad.
+ * @param squareIndexJ The index J of the quad.
+ * @return Bilinear interpolation of (squarePositionX,squarePositionY) in quad (squareIndexI, squareIndexJ).
+ */
 double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePositionY, uint64_t squareIndexI, uint64_t squareIndexJ)
 {
 	return	(1 - squarePositionX) * (1 - squarePositionY) * buffer[Index(squareIndexI, squareIndexJ)] +
 			squarePositionX *		(1 - squarePositionY) * buffer[Index(squareIndexI + 1, squareIndexJ)] +
 			squarePositionX *		squarePositionY *		buffer[Index(squareIndexI + 1, squareIndexJ + 1)] +
 			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
+}
+
+/**
+ * @brief Terrain::Erode
+ * @param passCount
+ * @param maxSlopeForDirt
+ * @param maxDirtLevel
+ * @param minDrop
+ * @param maxDrop
+ * @param stoppingSpeed
+ */
+void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSpeed)
+{
+    //
+    // First generation
+    for(uint i = 0; i < m_resolution; ++i)
+    {
+        for(uint j = 0; j < m_resolution; ++j)
+        {
+            //
+            // For the eight direction, compute the slope of the position
+            double maxSlope = -1000;
+            for(uint x = -1; x < 1; ++x)
+            {
+                for(uint y = -1; y < 1; ++y)
+                {
+                    double slope = abs(Height(Vector2(i+x, j+y) - Vector2(i, j)));
+                    maxSlope = std::max(slope, maxSlope);
+                }
+            }
+
+            //
+            // Compute the dirt level on this point
+            double dirtLevel = maxDirtLevel - ((maxSlope/maxSlopeForDirt) * maxDirtLevel);
+            dirtLevel = std::max(0.0, dirtLevel);
+            m_bufferDirt[Index(i, j)] = dirtLevel;
+        }
+    }
+
+    //
+    // Simulation loop
+    for(int nPass = 0; nPass < passCount; nPass++)
+    {
+        //
+        // Drop a new rock
+
+        //
+        // Choose a random position
+        int x = std::rand() % m_resolution;
+        int y = std::rand() % m_resolution;
+        //
+        // Compute the level of rock falling
+        // TODO change
+        double fallingRock = (double)(std::rand() % ((int)maxDrop - (int)minDrop)) + minDrop;
+
+        double speed = 1.0f;
+        bool stoped = false;
+        while(!stoped)
+        {
+            //
+            // Compute the new position
+            double maxSlope = -1000;
+            int newX = -1;
+            int newY = -1;
+            for(uint crtX = -1; x < 1; ++crtX)
+            {
+                for(uint crtY = -1; y < 1; ++crtY)
+                {
+                    double slope = abs(Height(Vector2(x+crtX, y+crtY) - Vector2(x, y)));
+                    if(slope > maxSlope)
+                    {
+                        newX = x + crtX;
+                        newY = y + crtY;
+                    }
+                }
+            }
+            //
+            // TODO Compute the new speed
+
+            //
+            //Check the stopping state
+            if(speed <= stoppingSpeed)
+            {
+                stoped = true;
+            }
+            else
+            {
+                x = newX;
+                y = newY;
+            }
+        }
+    }
+}
+
+void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed)
+{
+
 }
