@@ -17,6 +17,7 @@ public:
 	bool			ExportIMG	(const std::string& filename, bool doublePrecision);
 
     void			Carve       (double* height, double* mask, uint64_t resolution, const Vector2& position);
+    void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed = 1);
     double          getMaxSlope (const Vector2& crtPos, Vector2* nextPos);
     void			Erode       (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope);
 
