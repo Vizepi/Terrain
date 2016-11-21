@@ -234,6 +234,36 @@ double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePo
 			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
 }
 
+double Terrain::getMaxSlope(const Vector2& crtPos, Vector2* nextPos)
+{
+    //
+    // For the eight direction, compute the slope of the position
+    double maxSlope = -1000;
+    int newX = -1;
+    int newY = -1;
+    for(uint x = -1; x < 1; ++x)
+    {
+        for(uint y = -1; y < 1; ++y)
+        {
+            double slope = abs(Height(Vector2(crtPos.X()+x, crtPos.Y()+y) - crtPos));
+            if(slope > maxSlope)
+            {
+                newX = x + crtPos.X();
+                newY = y + crtPos.Y();
+                maxSlope = slope;
+            }        }
+    }
+    nextPos->SetX(newX);
+    nextPos->SetY(newY);
+    return maxSlope;
+}
+
+//
+// Simulator
+//
+// TODO Compute with rock speed
+//
+// TODO Use a better slope system
 /**
  * @brief Terrain::Erode
  * @param passCount
@@ -243,25 +273,18 @@ double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePo
  * @param maxDrop
  * @param stoppingSpeed
  */
-void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSpeed)
+void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
 {
     //
     // First generation
+    Vector2* tmpVec2 = new Vector2();
     for(uint i = 0; i < m_resolution; ++i)
     {
         for(uint j = 0; j < m_resolution; ++j)
         {
             //
             // For the eight direction, compute the slope of the position
-            double maxSlope = -1000;
-            for(uint x = -1; x < 1; ++x)
-            {
-                for(uint y = -1; y < 1; ++y)
-                {
-                    double slope = abs(Height(Vector2(i+x, j+y) - Vector2(i, j)));
-                    maxSlope = std::max(slope, maxSlope);
-                }
-            }
+            double maxSlope = getMaxSlope(Vector2(i, j), tmpVec2);
 
             //
             // Compute the dirt level on this point
@@ -272,55 +295,43 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
     }
 
     //
-    // Simulation loop
-    for(int nPass = 0; nPass < passCount; nPass++)
+    // Simulation loop drop passCount rock
+    for(uint64_t nPass = 0; nPass < passCount; nPass++)
     {
-        //
-        // Drop a new rock
-
         //
         // Choose a random position
         int x = std::rand() % m_resolution;
         int y = std::rand() % m_resolution;
         //
         // Compute the level of rock falling
-        // TODO change
+        // TODO change ?
         double fallingRock = (double)(std::rand() % ((int)maxDrop - (int)minDrop)) + minDrop;
+        double crtDirt = m_bufferDirt[Index(x, y)];
+        fallingRock = std::max(fallingRock, crtDirt);
 
-        double speed = 1.0f;
+        //
+        // Tear off the rock
+        m_bufferDirt[Index(x, y)] = crtDirt - fallingRock;
+
+        //
+        // Make the rock fall
         bool stoped = false;
         while(!stoped)
         {
             //
             // Compute the new position
-            double maxSlope = -1000;
-            int newX = -1;
-            int newY = -1;
-            for(uint crtX = -1; x < 1; ++crtX)
-            {
-                for(uint crtY = -1; y < 1; ++crtY)
-                {
-                    double slope = abs(Height(Vector2(x+crtX, y+crtY) - Vector2(x, y)));
-                    if(slope > maxSlope)
-                    {
-                        newX = x + crtX;
-                        newY = y + crtY;
-                    }
-                }
-            }
-            //
-            // TODO Compute the new speed
+            double slope = getMaxSlope(Vector2(x, y), tmpVec2);
 
             //
             //Check the stopping state
-            if(speed <= stoppingSpeed)
+            if(slope <= stoppingSlope)
             {
                 stoped = true;
             }
             else
             {
-                x = newX;
-                y = newY;
+                x = tmpVec2->X();
+                y = tmpVec2->Y();
             }
         }
     }
