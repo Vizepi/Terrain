@@ -42,9 +42,9 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 			height += amplitude;
 		}
 
-		for(uint64_t j = 0; j < resolution; ++j)
+		for(uint64_t j = 0; j < m_resolution; ++j)
 		{
-			for(uint64_t i = 0; i < resolution; ++i)
+			for(uint64_t i = 0; i < m_resolution; ++i)
 			{
 				double& h = m_bufferRock[Index(i, j)];
 				m_bufferDirt[Index(i, j)] = 0.0;
@@ -82,12 +82,10 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 		{
 			for(uint64_t i = 0; i < m_resolution; ++i)
 			{
-				/*Vector2 p = Point2(i, j);
+				Vector2 p = Point2(i, j);
 				uint64_t index = Index(i, j);
 				file << "v " << p.X() << " " << p.Y() << " " <<
-						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";*/
-				Vector3 p = Point3(i, j);
-				file << "v " << p.X() << " " << p.Y() << " " << p.Z() << "\n";
+						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
 			}
 		}
 		for(uint64_t j = 1; j < m_resolution; ++j)
@@ -156,8 +154,8 @@ bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
-			rock->setPixel(i, j, int(m_bufferRock[Index(i, j)] * (doublePrecision ? 0x10000 : 0x100)));
-			dirt->setPixel(i, j, int(m_bufferDirt[Index(i, j)] * (doublePrecision ? 0x10000 : 0x100)));
+			rock->setPixel(i, j, fmax(0.0, int(m_bufferRock[Index(i, j)] * (doublePrecision ? 0x10000 : 0x100))));
+			dirt->setPixel(i, j, fmax(0.0, int(m_bufferDirt[Index(i, j)] * (doublePrecision ? 0x10000 : 0x100))));
 		}
 	}
 	size_t dotPosition = filename.find_last_of('.');
@@ -330,5 +328,41 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
 
 void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed)
 {
+	Perlin perlin(seed);
+	double frequency = 0.0, amplitude = 0.0, rotation = 0.0;
+	Vector2 offset;
 
+	double height = 0.0;
+	for(uint64_t octave = 0; octave < builder.GetOctaveCount(); ++octave)
+	{
+		builder.GetOctave(octave, frequency, amplitude, offset, rotation);
+		height += amplitude;
+	}
+
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			double& hRock = m_bufferRock[Index(i, j)];
+			double h = 0.0;
+			for(uint64_t octave = 0; octave < builder.GetOctaveCount(); ++octave)
+			{
+				builder.GetOctave(octave, frequency, amplitude, offset, rotation);
+
+				h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotation / 180.0) * Point2(i, j) * frequency + offset)) * amplitude / 2.0;
+			}
+			h /= height;
+
+			h = (h * (altitude.X() - altitude.Y()) + altitude.Y());
+
+			double hRock2 = hRock * m_aabb.Size().Z() + m_aabb.A().Z();
+			double hDirt2 = m_bufferDirt[Index(i, j)] * m_aabb.Size().Z();
+			h -= hDirt2;
+
+			if(hRock2 > h)
+			{
+				hRock = (h + h - hRock2 - m_aabb.A().Z()) / m_aabb.Size().Z();
+			}
+		}
+	}
 }
