@@ -27,6 +27,7 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 	, m_gradient(nullptr)
 	, m_aabb(aabb)
 	, m_verbose(verbose)
+	, m_generator(seed)
 {
 	VERBOSE("Generating terrain")
 	if(resolution > 0)
@@ -36,7 +37,7 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 		m_bufferDirt = new double[size];
 		m_gradient = new Vector2[size];
 
-		Perlin perlin(seed);
+		Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
 		double frequency = 0.0, amplitude = 0.0, rotation = 0.0;
 		Vector2 offset;
 
@@ -160,8 +161,8 @@ bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
-			rock->setPixel(i, j, fmax(0.0, int(m_bufferRock[Index(i, j)] * (doublePrecision ? 0x10000 : 0x100))));
-			dirt->setPixel(i, j, fmax(0.0, int(m_bufferDirt[Index(i, j)] * (doublePrecision ? 0x10000 : 0x100))));
+			rock->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferRock[Index(i, j)])) * (doublePrecision ? 0x10000 : 0x100)));
+			dirt->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferDirt[Index(i, j)])) * (doublePrecision ? 0x10000 : 0x100)));
 		}
 	}
 	size_t dotPosition = filename.find_last_of('.');
@@ -282,6 +283,11 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
 void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
 {
 	VERBOSE("Eroding terrain")
+	//
+	// Create random
+	std::uniform_int_distribution<uint64_t> rand_u64(0, m_resolution - 1);
+	std::uniform_real_distribution<double> rand_dbl(0.0, maxDrop - minDrop);
+
     //
     // First generation
     Vector2* tmpVec2 = new Vector2();
@@ -307,12 +313,12 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
     {
         //
         // Choose a random position
-        int x = std::rand() % m_resolution;
-        int y = std::rand() % m_resolution;
+		int x = rand_u64(m_generator);
+		int y = rand_u64(m_generator);
         //
         // Compute the level of rock falling
         // TODO change ?
-        double fallingRock = (double)(std::rand() % ((int)maxDrop - (int)minDrop)) + minDrop;
+		double fallingRock = rand_dbl(m_generator) + minDrop;
         double crtDirt = m_bufferDirt[Index(x, y)];
         fallingRock = std::max(fallingRock, crtDirt);
 
@@ -344,10 +350,15 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
     }
 }
 
-void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed)
+/**
+ * @brief Add ridges on the terrain.
+ * @param builder A terrain builder to generate ridge heightfield.
+ * @param altitude A vector containing maximal altitude in X and minimal atlitude in Y.
+ */
+void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 {
 	VERBOSE("Adding ridge")
-	Perlin perlin(seed);
+	Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
 	double frequency = 0.0, amplitude = 0.0, rotation = 0.0;
 	Vector2 offset;
 

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <random>
 
 class Terrain
 {
@@ -19,7 +20,7 @@ public:
 	bool			ExportIMG	(const std::string& filename, bool doublePrecision);
 
     void			Carve       (double* height, double* mask, uint64_t resolution, const Vector2& position);
-    void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude, uint64_t seed = 1);
+	void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude);
 	double          GetMaxSlope (const Vector2& crtPos, Vector2* nextPos);
     void			Erode       (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope);
 
@@ -32,12 +33,13 @@ private:
 
 	double			Bilinear(double* buffer, double squarePositionX, double squarePositionY, uint64_t squareIndexI, uint64_t squareIndexJ);
 
-	uint64_t	m_resolution;
-	double*		m_bufferRock;
-	double*		m_bufferDirt;
-	Vector2*	m_gradient;
-	AABB3		m_aabb;
-	bool		m_verbose;
+	uint64_t		m_resolution;
+	double*			m_bufferRock;
+	double*			m_bufferDirt;
+	Vector2*		m_gradient;
+	AABB3			m_aabb;
+	bool			m_verbose;
+	std::mt19937_64 m_generator;
 
 };
 
