@@ -7,6 +7,7 @@
 #include "PI.h"
 #include <fstream>
 #include <iostream>
+#include <limits>
 
 #include <QImage>
 #include <QVector>
@@ -29,46 +30,91 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 	, m_verbose(verbose)
 	, m_generator(seed)
 {
-	VERBOSE("Generating terrain")
-	if(resolution > 0)
+	VERBOSE("Generating terrain");
+
+	//
+	// Allocate buffers
+	uint64_t size = resolution * resolution;
+	m_bufferRock = new double[size];
+	m_bufferDirt = new double[size];
+	m_gradient = new Vector2[size];
+
+	//
+	// Create temporaries
+	Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
+	uint64_t octaveCount = builder.GetOctaveCount();
+	double* frequencies = new double[octaveCount];
+	double* amplitudes = new double[octaveCount];
+	double* rotations = new double[octaveCount];
+	Vector2* offsets = new Vector2[octaveCount];
+
+	//
+	// Copy builder values to get fast access and total amplitude
+	for(uint64_t octave = 0; octave < octaveCount; ++octave)
 	{
-		uint64_t size = resolution * resolution;
-		m_bufferRock = new double[size];
-		m_bufferDirt = new double[size];
-		m_gradient = new Vector2[size];
+		builder.GetOctave(octave, frequencies[octave], amplitudes[octave], offsets[octave], rotations[octave]);
+	}
 
-		Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
-		double frequency = 0.0, amplitude = 0.0, rotation = 0.0;
-		Vector2 offset;
+	//
+	// Generate each height
+	double minHeight = std::numeric_limits<double>().max();
+	double maxHeight = std::numeric_limits<double>().min();
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			//
+			// Initialize each height to 0.0
+			double& h = m_bufferRock[Index(i, j)];
+			m_bufferDirt[Index(i, j)] = 0.0;
+			h = 0.0;
 
-		double height = 0.0;
-		for(uint64_t octave = 0; octave < builder.GetOctaveCount(); ++octave)
-		{
-			builder.GetOctave(octave, frequency, amplitude, offset, rotation);
-			height += amplitude;
-		}
-		for(uint64_t j = 0; j < m_resolution; ++j)
-		{
-			for(uint64_t i = 0; i < m_resolution; ++i)
+			//
+			// Generate each octave and sums them
+			for(uint64_t octave = 0; octave < octaveCount; ++octave)
 			{
-				double& h = m_bufferRock[Index(i, j)];
-				m_bufferDirt[Index(i, j)] = 0.0;
-				h = 0.0;
-				for(uint64_t octave = 0; octave < builder.GetOctaveCount(); ++octave)
-				{
-					builder.GetOctave(octave, frequency, amplitude, offset, rotation);
-
-					h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotation / 180.0) * Point2(i, j) * frequency + offset)) * amplitude / 2.0;
-				}
-				h /= height;
+				h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotations[octave] / 180.0) * Point2(i, j) * frequencies[octave] + offsets[octave])) * amplitudes[octave] / 2.0;
+			}
+			if(h < minHeight)
+			{
+				minHeight = h;
+			}
+			if(h > maxHeight)
+			{
+				maxHeight = h;
 			}
 		}
 	}
+
+	double height = maxHeight - minHeight;
+
+	//
+	// Rescale height
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			double& h = m_bufferRock[Index(i, j)];
+			h = (h - minHeight) / height;
+		}
+	}
+
+	//
+	// Clean memory
+	delete[] frequencies;
+	delete[] amplitudes;
+	delete[] rotations;
+	delete[] offsets;
 }
 
 /*virtual*/ Terrain::~Terrain(void)
 {
-
+	if(m_resolution > 0)
+	{
+		delete[] m_bufferDirt;
+		delete[] m_bufferRock;
+		delete[] m_gradient;
+	}
 }
 
 /**
@@ -79,11 +125,17 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
  */
 bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 {
-	VERBOSE("Exporting OBJ")
+	VERBOSE("Exporting OBJ");
+
+	//
+	// Create file
 	std::ofstream file(filename, std::ios::out);
 	file << "o terrain\ng height_map\n";
 	if(file.is_open())
 	{
+		//
+		// Save vertices
+		VERBOSE("\tVertices...");
 		for(uint64_t j = 0; j < m_resolution; ++j)
 		{
 			for(uint64_t i = 0; i < m_resolution; ++i)
@@ -94,6 +146,27 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
 			}
 		}
+		//
+		// Save normals
+		if(exportNormals)
+		{
+			VERBOSE("\tNormals...");
+			Gradient();
+			for(uint64_t j = 0; j < m_resolution; ++j)
+			{
+				for(uint64_t i = 0; i < m_resolution; ++i)
+				{
+					uint64_t index = Index(i, j);
+					Vector2 gradient = m_gradient[index];
+					Vector3 normal(gradient.X(), gradient.Y(), sqrt(gradient.Length() - pow(gradient.X(), 2.0) - pow(gradient.Y(), 2.0)));
+					normal.Normalize();
+					file << "vn " << normal.X() << " " << normal.Y() << " " << normal.Z() << "\n";
+				}
+			}
+		}
+		//
+		// Save faces
+		VERBOSE("\tFaces...");
 		for(uint64_t j = 1; j < m_resolution; ++j)
 		{
 			for(uint64_t i = 1; i < m_resolution; ++i)
@@ -104,6 +177,8 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 				uint64_t d = i + (j + 1) * m_resolution - m_resolution;
 				if(exportNormals)
 				{
+					//
+					// Save vertices and normals
 					file << "f " << a << "//" << a
 						 << " " << b << "//" << b
 						 << " " << c << "//" << c
@@ -111,10 +186,12 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 				}
 				else
 				{
-				file << "f " << a
-					 << " " << b
-					 << " " << c
-					 << " " << d << "\n";
+					//
+					// Save vertices
+					file << "f " << a
+						 << " " << b
+						 << " " << c
+						 << " " << d << "\n";
 				}
 			}
 		}
@@ -135,7 +212,10 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
  */
 bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 {
-	VERBOSE("Exporting image")
+	VERBOSE("Exporting image");
+
+	//
+	// Allocate images
 	QImage* rock = nullptr;
 	QImage* dirt = nullptr;
 	if(doublePrecision)
@@ -157,18 +237,26 @@ bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 		dirt->setColorTable(colorTable);
 		dirt->setColorCount(256);
 	}
+
+	//
+	// Copy pixels in the images
 	for(uint64_t j = 0; j < m_resolution; ++j)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
-			rock->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferRock[Index(i, j)])) * (doublePrecision ? 0x10000 : 0x100)));
-			dirt->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferDirt[Index(i, j)])) * (doublePrecision ? 0x10000 : 0x100)));
+			rock->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferRock[Index(i, j)])) * (doublePrecision ? 0xffff : 0xff)));
+			dirt->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferDirt[Index(i, j)])) * (doublePrecision ? 0xffff : 0xff)));
 		}
 	}
+
+	//
+	// Create filenames
 	size_t dotPosition = filename.find_last_of('.');
 	std::string rockname = filename.substr(0, dotPosition) + "_rock" + filename.substr(dotPosition);
 	std::string dirtname = filename.substr(0, dotPosition) + "_dirt" + filename.substr(dotPosition);
 
+	//
+	// Save images, clean memory and return
 	bool success = true;
 	success = success && rock->save(rockname.c_str());
 	success = success && dirt->save(dirtname.c_str());
@@ -225,20 +313,38 @@ Vector3 Terrain::Point3(uint64_t x, uint64_t y)
 }
 
 /**
- * @brief Compute the bilinear interpolation of a point in a quad.
- * @param buffer The buffer in which to take the quad.
- * @param squarePositionX The position X in the quad.
- * @param squarePositionY The position Y in the quad.
- * @param squareIndexI The index I of the quad.
- * @param squareIndexJ The index J of the quad.
- * @return Bilinear interpolation of (squarePositionX,squarePositionY) in quad (squareIndexI, squareIndexJ).
+ * @brief Import a 2D map into this terrain.
+ * @param carveRock Set to true id rock buffer is used for carving.
+ * @param carveDirt Set to true if dirt buffer is used for carving.
+ * @param rock Rock buffer to carve on the terrain.
+ * @param dirt Dirt buffer to carve on the terrain.
+ * @param mask Blending mask. A value of 1.0 correspond to 100% carving buffer, and 0.0 to 100% terrain buffer.
+ * @param resolution Length of the carved surface square side.
+ * @param position The position where to carve the surface, corresponding to the center of the carved surface.
+ * @param scale Scaling of the carved surface.
+ * @param rotation Rotation angle of the carved surface in degrees.
  */
-double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePositionY, uint64_t squareIndexI, uint64_t squareIndexJ)
+void Terrain::Carve(bool carveRock, bool carveDirt, double* rock, double* dirt, double* mask, uint64_t resolution, const Vector2& position, double scale, double rotation)
 {
-	return	(1 - squarePositionX) * (1 - squarePositionY) * buffer[Index(squareIndexI, squareIndexJ)] +
-			squarePositionX *		(1 - squarePositionY) * buffer[Index(squareIndexI + 1, squareIndexJ)] +
-			squarePositionX *		squarePositionY *		buffer[Index(squareIndexI + 1, squareIndexJ + 1)] +
-			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
+	Matrix2x2 rotationMatrix(rotation);
+	if(carveRock)
+	{
+		Vector3* rockBuffer = new Vector3[resolution * resolution];
+		for(uint64_t j = 0; j < resolution; ++j)
+		{
+			for(uint64_t i = 0; i < resolution; ++i)
+			{
+				Vector2 p((i - (resolution / 2.0)) * scale, (j - (resolution / 2.0)) * scale);
+				p = rotationMatrix * p;
+				rockBuffer[i + j * resolution] = Vector3(p.X(), p.Y(), rock[i + j * resolution]);
+			}
+		}
+
+	}
+	if(carveDirt)
+	{
+
+	}
 }
 
 double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
@@ -282,7 +388,7 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
  */
 void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
 {
-	VERBOSE("Eroding terrain")
+	VERBOSE("Eroding terrain");
 	//
 	// Create random
 	std::uniform_int_distribution<uint64_t> rand_u64(0, m_resolution - 1);
@@ -357,41 +463,123 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
  */
 void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 {
-	VERBOSE("Adding ridge")
-	Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
-	double frequency = 0.0, amplitude = 0.0, rotation = 0.0;
-	Vector2 offset;
+	VERBOSE("Adding ridge");
 
-	double height = 0.0;
-	for(uint64_t octave = 0; octave < builder.GetOctaveCount(); ++octave)
+	//
+	// Create temporaries
+	Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
+	uint64_t octaveCount = builder.GetOctaveCount();
+	double* frequencies = new double[octaveCount];
+	double* amplitudes = new double[octaveCount];
+	double* rotations = new double[octaveCount];
+	Vector2* offsets = new Vector2[octaveCount];
+
+	//
+	// Copy builder values to get fast access and total amplitude
+	for(uint64_t octave = 0; octave < octaveCount; ++octave)
 	{
-		builder.GetOctave(octave, frequency, amplitude, offset, rotation);
-		height += amplitude;
+		builder.GetOctave(octave, frequencies[octave], amplitudes[octave], offsets[octave], rotations[octave]);
 	}
+
+	//
+	// Compute ridge
+	double minRidge = std::numeric_limits<double>().max();
+	double maxRidge = std::numeric_limits<double>().min();
+	double* ridge = new double[m_resolution * m_resolution];
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			double& h = ridge[Index(i, j)];
+			h = 0.0;
+
+			//
+			// Generate octaves and sums them
+			for(uint64_t octave = 0; octave < octaveCount; ++octave)
+			{
+				h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotations[octave] / 180.0) * Point2(i, j) * frequencies[octave] + offsets[octave])) * amplitudes[octave] / 2.0;
+			}
+			if(h < minRidge)
+			{
+				minRidge = h;
+			}
+			if(h > maxRidge)
+			{
+				maxRidge = h;
+			}
+		}
+	}
+	double height = maxRidge - minRidge;
+
+	//
+	// Apply ridge
 	for(uint64_t j = 0; j < m_resolution; ++j)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
 			double& hRock = m_bufferRock[Index(i, j)];
-			double h = 0.0;
-			for(uint64_t octave = 0; octave < builder.GetOctaveCount(); ++octave)
-			{
-				builder.GetOctave(octave, frequency, amplitude, offset, rotation);
+			double h = ridge[Index(i, j)];
 
-				h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotation / 180.0) * Point2(i, j) * frequency + offset)) * amplitude / 2.0;
-			}
-			h /= height;
-
-			h = (h * (altitude.X() - altitude.Y()) + altitude.Y());
-
+			h = (((h - minRidge) / height) * (altitude.X() - altitude.Y()) + altitude.Y());
+			//
+			// Compare ridge with terrain
 			double hRock2 = hRock * m_aabb.Size().Z() + m_aabb.A().Z();
 			double hDirt2 = m_bufferDirt[Index(i, j)] * m_aabb.Size().Z();
 			h -= hDirt2;
 
 			if(hRock2 > h)
 			{
+				//std::cout << h << std::endl;
 				hRock = (h + h - hRock2 - m_aabb.A().Z()) / m_aabb.Size().Z();
 			}
 		}
 	}
+
+	//
+	// Clean memory
+	delete[] ridge;
+	delete[] frequencies;
+	delete[] amplitudes;
+	delete[] rotations;
+	delete[] offsets;
+}
+
+/**
+ * @brief Compute gradient on the entire terrain
+ */
+void Terrain::Gradient(void)
+{
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		int64_t jp = int64_t(j)+1, jm = int64_t(j)-1;
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			double point = m_bufferRock[Index(i, j)] + m_bufferDirt[Index(i, j)];
+			int64_t ip = int64_t(i)+1, im = int64_t(i)-1;
+			double s = (jm >= 0 ?			m_bufferRock[Index(i, jm)] + m_bufferDirt[Index(i, jm)] : point + point - (m_bufferRock[Index(i, jp)] + m_bufferDirt[Index(i, jp)]));
+			double n = (jp < m_resolution ? m_bufferRock[Index(i, jp)] + m_bufferDirt[Index(i, jp)] : point + point - (m_bufferRock[Index(i, jm)] + m_bufferDirt[Index(i, jm)]));
+			double w = (im >= 0 ?			m_bufferRock[Index(im, j)] + m_bufferDirt[Index(im, j)] : point + point - (m_bufferRock[Index(ip, j)] + m_bufferDirt[Index(ip, j)]));
+			double e = (ip < m_resolution ? m_bufferRock[Index(ip, j)] + m_bufferDirt[Index(ip, j)] : point + point - (m_bufferRock[Index(im, j)] + m_bufferDirt[Index(im, j)]));
+
+			m_gradient[Index(i, j)] = Vector2(e - w, n - s);
+
+		}
+	}
+}
+
+/**
+ * @brief Compute the bilinear interpolation of a point in a quad.
+ * @param buffer The buffer in which to take the quad.
+ * @param squarePositionX The position X in the quad.
+ * @param squarePositionY The position Y in the quad.
+ * @param squareIndexI The index I of the quad.
+ * @param squareIndexJ The index J of the quad.
+ * @return Bilinear interpolation of (squarePositionX,squarePositionY) in quad (squareIndexI, squareIndexJ).
+ */
+double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePositionY, uint64_t squareIndexI, uint64_t squareIndexJ)
+{
+	return	(1 - squarePositionX) * (1 - squarePositionY) * buffer[Index(squareIndexI, squareIndexJ)] +
+			squarePositionX *		(1 - squarePositionY) * buffer[Index(squareIndexI + 1, squareIndexJ)] +
+			squarePositionX *		squarePositionY *		buffer[Index(squareIndexI + 1, squareIndexJ + 1)] +
+			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
 }
