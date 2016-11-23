@@ -21,6 +21,9 @@ int main(int argc, char *argv[])
 	builder.SetOctave(7, 1.0/1.0,		0.01,Vector2(0.0, 0.0), 40.0);
 
 	Terrain t(builder, 1000, AABB3(Vector3(-2000, -2000, 0), Vector3(2000, 2000, 1500)), 1);
+    //Erode(uint64_t assCOunt, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
+    t.Erode(10000, 100, 10, 5, 10, 100);
+
 	t.ExportOBJ("Output/Terrain.obj", false);
 	t.ExportIMG("Output/Terrain.png", false);
 
