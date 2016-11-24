@@ -260,7 +260,7 @@ bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 	bool success = true;
 	success = success && rock->save(rockname.c_str());
 	success = success && dirt->save(dirtname.c_str());
-	delete rock;
+    delete rock;
 	delete dirt;
 	return success;
 }
@@ -350,25 +350,71 @@ void Terrain::Carve(bool carveRock, bool carveDirt, double* rock, double* dirt, 
 double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
 {
     //
-    // For the eight direction, compute the slope of the position
-    double maxSlope = -1000;
-    int newX = -1;
-    int newY = -1;
-    for(uint x = -1; x < 1; ++x)
+    // Get the gradient at the current position
+    Vector2 grad = m_gradient[Index(crtPos.X(), crtPos.Y())];
+    grad.Normalize();
+    double angle = DotProduct(Vector2(1.0, 0.0), grad);
+
+    nextPos->SetX(crtPos.X());
+    nextPos->SetY(crtPos.Y());
+
+    double squarelength = m_aabb.Size().X()/(double)m_resolution;
+    //
+    // Find the next position
+    if(angle > M_PI/6.0 && angle < (5*M_PI)/6.0)
     {
-        for(uint y = -1; y < 1; ++y)
-        {
-            double slope = abs(Height(Vector2(crtPos.X()+x, crtPos.Y()+y) - crtPos));
-            if(slope > maxSlope)
-            {
-                newX = x + crtPos.X();
-                newY = y + crtPos.Y();
-                maxSlope = slope;
-            }        }
+       nextPos->SetY(crtPos.Y()+1);
     }
-    nextPos->SetX(newX);
-    nextPos->SetY(newY);
-    return maxSlope;
+    else if(angle > (7*M_PI)/6.0 && angle < (11*M_PI)/6.0)
+    {
+        nextPos->SetY(crtPos.Y()-1);
+    }
+
+    if(angle < M_PI/3.0 && angle < (5*M_PI)/3.0)
+    {
+        nextPos->SetX(crtPos.X()+1);
+    }
+    else if(angle > (2*M_PI)/3.0 && angle < (4*M_PI)/3.0)
+    {
+        nextPos->SetX(crtPos.X()-1);
+    }
+
+    if(nextPos->Y() < 0)
+    {
+        nextPos->SetY(0);
+    }
+    else if(nextPos->Y() >= m_resolution)
+    {
+        nextPos->SetY(m_resolution-1);
+    }
+    if(nextPos->X() < 0)
+    {
+        nextPos->SetX(0);
+    }
+    else if(nextPos->X() >= m_resolution)
+    {
+        nextPos->SetX(m_resolution-1);
+    }
+
+    //
+    // Compute the slope angle
+    double height = std::max(Height(*nextPos) - Height(crtPos), 0.0);
+    double length;
+    if(nextPos->X() != crtPos.X() && nextPos->Y() != crtPos.Y())
+    {
+        length = sqrt(squarelength*squarelength*2);
+    }
+    else
+    {
+        length = squarelength;
+    }
+    double angleRes = atan(height/length)*180.0/M_PI;
+    /*VERBOSE("ANGLE = " << angleRes);
+    VERBOSE("height = " << height);
+    VERBOSE("length = " << length);*/
+    /*VERBOSE("Height(*nextPos) = " << Height(*nextPos));
+    VERBOSE("Height(crtPos) = " << Height(crtPos));*/
+    return angleRes;
 }
 
 //
@@ -386,9 +432,13 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
  * @param maxDrop
  * @param stoppingSpeed
  */
-void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
+void Terrain::Erode (uint64_t passCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle)
 {
+    //
+    // Get the gradient in each point
+    Gradient();
 	VERBOSE("Eroding terrain");
+
 	//
 	// Create random
 	std::uniform_int_distribution<uint64_t> rand_u64(0, m_resolution - 1);
@@ -403,19 +453,22 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
         {
             //
             // For the eight direction, compute the slope of the position
-			double maxSlope = GetMaxSlope(Vector2(i, j), tmpVec2);
+            double angleSlope = GetMaxSlope(Vector2(i, j), tmpVec2);
 
             //
             // Compute the dirt level on this point
-            double dirtLevel = maxDirtLevel - ((maxSlope/maxSlopeForDirt) * maxDirtLevel);
-            dirtLevel = std::max(0.0, dirtLevel);
+            double dirtFade = 1.0 - std::min(angleSlope/maxAngleForDirt, 1.0);
+            double dirtLevel = maxDirtLevel * dirtFade;
+            dirtLevel = dirtLevel;
+            VERBOSE("dirtLevel = " << dirtLevel)
             m_bufferDirt[Index(i, j)] = dirtLevel;
         }
     }
+    VERBOSE("First level of dirt added");
 
     //
     // Simulation loop drop passCount rock
-    for(uint64_t nPass = 0; nPass < passCount; nPass++)
+    /*for(uint64_t nPass = 0; nPass < passCount; nPass++)
     {
         //
         // Choose a random position
@@ -439,11 +492,11 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
         {
             //
             // Compute the new position
-			double slope = GetMaxSlope(Vector2(x, y), tmpVec2);
+            double angleSlope = GetMaxSlope(Vector2(x, y), tmpVec2);
 
             //
             //Check the stopping state
-            if(slope <= stoppingSlope)
+            if(angleSlope <= stoppingAngle)
             {
                 stoped = true;
             }
@@ -453,7 +506,7 @@ void Terrain::Erode (uint64_t passCount, double maxSlopeForDirt, double maxDirtL
                 y = tmpVec2->Y();
             }
         }
-    }
+    }*/
 }
 
 /**

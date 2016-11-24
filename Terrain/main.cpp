@@ -27,9 +27,13 @@ int main(int argc, char *argv[])
 	t.Ridge(ridge, Vector2(2500, 1500));
 	t.Influence(builder);
 	t.Gradient();
+
+    //Erode(uint64_t assCOunt, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
+    t.Erode(10000, 35, 10, 5, 10, 35);
+
 	//t.ExportOBJ("Output/Terrain.obj", false);
 	t.ExportOBJ("Output/TerrainN.obj", true);
-	//t.ExportIMG("Output/Terrain.png", true);
+    t.ExportIMG("Output/Terrain.png", true);
 
 	return 0;
 }
