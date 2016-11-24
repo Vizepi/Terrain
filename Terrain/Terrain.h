@@ -24,6 +24,7 @@ public:
     void			Erode       (uint64_t passCount, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope);
 	void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude);
 	void			Gradient	(void);
+	void			Influence	(const TerrainBuilder& builder);
 
 	inline uint64_t	Index	(uint64_t x, uint64_t y) { return x * m_resolution + y; }
 	double			Height	(const Vector2& position);

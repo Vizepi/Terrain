@@ -490,8 +490,7 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
-			double& h = ridge[Index(i, j)];
-			h = 0.0;
+			double h = 0.0;
 
 			//
 			// Generate octaves and sums them
@@ -507,6 +506,7 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 			{
 				maxRidge = h;
 			}
+			ridge[Index(i, j)] = h;
 		}
 	}
 	double height = maxRidge - minRidge;
@@ -529,7 +529,6 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 
 			if(hRock2 > h)
 			{
-				//std::cout << h << std::endl;
 				hRock = (h + h - hRock2 - m_aabb.A().Z()) / m_aabb.Size().Z();
 			}
 		}
@@ -563,6 +562,58 @@ void Terrain::Gradient(void)
 
 			m_gradient[Index(i, j)] = Vector2(e - w, n - s);
 
+		}
+	}
+}
+
+/**
+ * @brief Add influence point on terrain.
+ * @param builder The terrain builder that contains influence points definition.
+ */
+void Terrain::Influence(const TerrainBuilder& builder)
+{
+	Vector2* ipPositions;
+	double* ipRadius;
+	uint64_t ipCount = builder.GetInfluencePointCount();
+	double minCoef = builder.GetMinPercentHeightCoef();
+	if(ipCount)
+	{
+		ipPositions = new Vector2[ipCount];
+		ipRadius = new double[ipCount];
+		for(uint64_t nIp = 0; nIp < ipCount; ++nIp)
+		{
+			builder.GetInfluencePoint(nIp, ipPositions[nIp], ipRadius[nIp]);
+		}
+
+		//
+		// Rescale height
+		for(uint64_t j = 0; j < m_resolution; ++j)
+		{
+			for(uint64_t i = 0; i < m_resolution; ++i)
+			{
+				double& h = m_bufferRock[Index(i, j)];
+
+				//
+				// Use influence points
+				double multiplier = 0.0;
+				for(uint64_t nIp = 0; nIp < ipCount; ++nIp)
+				{
+					double distance = (Point2(i, j) - ipPositions[nIp]).Length();
+					if(distance < ipRadius[nIp])
+					{
+						multiplier += (sin(M_PI * (distance / ipRadius[nIp] + 0.5)) / 2.0) + 0.5;
+						multiplier = fmin(multiplier, 1.0);
+					}
+				}
+				if(multiplier  != 0.0)
+				{
+					h *= multiplier * (1.0 - minCoef) + minCoef;
+				}
+				else
+				{
+					h *= minCoef;
+				}
+			}
 		}
 	}
 }
