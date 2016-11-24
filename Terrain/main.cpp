@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
 	t.Gradient();
 
     //Erode(uint64_t assCOunt, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
-    t.Erode(10000, 35, 10, 5, 10, 35);
+	//t.Erode(10000, 35, 10, 5, 10, 35);
 
 	//t.ExportOBJ("Output/Terrain.obj", false);
 	t.ExportOBJ("Output/TerrainN.obj", true);
