@@ -16,7 +16,7 @@ public:
 
 	inline void		SetVerbose	(bool verbose) { m_verbose = verbose; }
 
-	bool			ExportOBJ	(const std::string& filename, bool exportNormals = false);
+	bool			ExportOBJ	(const std::string& filename, bool exportNormals = false, bool exportUV = false);
 	bool			ExportIMG	(const std::string& filename, bool doublePrecision);
 
 	void			Carve       (bool carveRock, bool carveDirt, double* rock, double* dirt, double* mask, uint64_t resolution, const Vector2& position, double scale = 1.0, double rotation = 0.0);

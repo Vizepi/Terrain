@@ -121,9 +121,10 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
  * @brief Export the terrain in a .obj file.
  * @param filename Name of the obj file in which to export terrain.
  * @param exportNormals Set to true to export normals in the .obj.
+ * @param exportUV Export colors in .obj.
  * @return On success, returns true. If the file cannot be open, returns false.
  */
-bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
+bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals, bool exportUV)
 {
 	VERBOSE("Exporting OBJ");
 
@@ -133,6 +134,7 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 	file << "o terrain\ng height_map\n";
 	if(file.is_open())
 	{
+		double maxHeight = std::numeric_limits<double>().min();
 		//
 		// Save vertices
 		VERBOSE("\tVertices...");
@@ -142,8 +144,12 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 			{
 				Vector2 p = Point2(i, j);
 				uint64_t index = Index(i, j);
-				file << "v " << p.X() << " " << p.Y() << " " <<
-						(m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
+				double height = (m_bufferRock[index] + m_bufferDirt[index]);
+				file << "v " << p.X() << " " << p.Y() << " " << height * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
+				if(height > maxHeight)
+				{
+					maxHeight = height;
+				}
 			}
 		}
 		//
@@ -164,9 +170,19 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 				}
 			}
 		}
+		// Save UVs
+		if(exportUV)
+		{
+			VERBOSE("\tUVs...");
+			for(uint64_t i = 0; i < 256; ++i)
+			{
+				file << "vt 0.5 " << (i + 0.5) / 256.0 << "\n";
+			}
+		}
 		//
 		// Save faces
 		VERBOSE("\tFaces...");
+		char buffer[10];
 		for(uint64_t j = 1; j < m_resolution; ++j)
 		{
 			for(uint64_t i = 1; i < m_resolution; ++i)
@@ -175,23 +191,42 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 				uint64_t b = i + j * m_resolution + 1 - m_resolution;
 				uint64_t c = i + 1 + (j + 1) * m_resolution - m_resolution;
 				uint64_t d = i + (j + 1) * m_resolution - m_resolution;
+				uint64_t n = j + i * m_resolution - m_resolution;;
 				if(exportNormals)
 				{
+					buffer[0] = 0;
+					if(exportUV)
+					{
+						sprintf(buffer, "%d", int((m_bufferRock[n] + m_bufferDirt[n]) * 255.0 / maxHeight) + 1);
+					}
 					//
 					// Save vertices and normals
-					file << "f " << a << "//" << a
-						 << " " << b << "//" << b
-						 << " " << c << "//" << c
-						 << " " << d << "//" << d << "\n";
+					file << "f " << a << "/" << buffer << "/" << a
+						 << " " << b << "/" << buffer << "/" << b
+						 << " " << c << "/" << buffer << "/" << c
+						 << " " << d << "/" << buffer << "/" << d << "\n";
 				}
 				else
 				{
-					//
-					// Save vertices
-					file << "f " << a
-						 << " " << b
-						 << " " << c
-						 << " " << d << "\n";
+					if(exportUV)
+					{
+						sprintf(buffer, "%d", int((m_bufferRock[n] + m_bufferDirt[n]) * 255.0 / maxHeight) + 1);
+						//
+						// Save vertices and UVs
+						file << "f " << a << "/" << buffer
+							 << " " << b << "/" << buffer
+							 << " " << c << "/" << buffer
+							 << " " << d << "/" << buffer << "\n";
+					}
+					else
+					{
+						//
+						// Save vertices
+						file << "f " << a
+							 << " " << b
+							 << " " << c
+							 << " " << d << "\n";
+					}
 				}
 			}
 		}
