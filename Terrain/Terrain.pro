@@ -26,6 +26,7 @@ HEADERS  += \
     AABB.h \
     Perlin.h \
     Matrix.h \
-    PI.h
+    PI.h \
+    Tree.h
 
 FORMS    += MainWindow.ui

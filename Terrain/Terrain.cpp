@@ -57,8 +57,6 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 
 	//
 	// Generate each height
-	double minHeight = std::numeric_limits<double>().max();
-	double maxHeight = std::numeric_limits<double>().min();
 	for(uint64_t j = 0; j < m_resolution; ++j)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
@@ -75,27 +73,18 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 			{
 				h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotations[octave] / 180.0) * Point2(i, j) * frequencies[octave] + offsets[octave])) * amplitudes[octave] / 2.0;
 			}
-			if(h < minHeight)
-			{
-				minHeight = h;
-			}
-			if(h > maxHeight)
-			{
-				maxHeight = h;
-			}
-		}
-	}
 
-	double height = maxHeight - minHeight;
-
-	//
-	// Rescale height
-	for(uint64_t j = 0; j < m_resolution; ++j)
-	{
-		for(uint64_t i = 0; i < m_resolution; ++i)
-		{
-			double& h = m_bufferRock[Index(i, j)];
-			h = (h - minHeight) / height;
+			//
+			// Clamp terrain and put value in range [0;1]
+			if(h < m_aabb.A().Z())
+			{
+				h = m_aabb.A().Z();
+			}
+			if(h > m_aabb.B().Z())
+			{
+				h = m_aabb.B().Z();
+			}
+			h = (h - m_aabb.A().Z()) / m_aabb.Size().Z();
 		}
 	}
 
