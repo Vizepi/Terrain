@@ -18,15 +18,15 @@ int main(int argc, char *argv[])
 	ridge.SetOctave(2, 1.0/1000.0,		100,	Vector2(0.0, 0.0), 10.0);
 	ridge.SetOctave(3, 1.0/100.0,		10,		Vector2(0.0, 0.0), 0.0);
 
-	Terrain t(builder, 500, AABB3(Vector3(-5000, -5000, 1000), Vector3(5000, 5000, 3000)), 666, true);
-	t.Ridge(ridge, Vector2(2500, 2250));
-	t.Gradient();
+    Terrain t(builder, 500, AABB3(Vector3(-5000, -5000, 1000), Vector3(5000, 5000, 3000)), 666, true);
+    t.Ridge(ridge, Vector2(2500, 2250));
+    //t.Gradient();
 
-    //Erode(uint64_t assCOunt, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
-    t.Erode(10000, 35, 10, 5, 10, 35);
+    //Erode(uint64_t passCOunt, double maxSlopeForDirt, double maxDirtLevelInPourcentage, double minDrop, double maxDrop, double stoppingSlope)
+    t.Erode(0, 0, 35, 1.0, 0.0, 1.0, 10, 1.0);
 
 	//t.ExportOBJ("Output/Terrain.obj", false);
-	t.ExportOBJ("Output/TerrainN.obj", true);
+    t.ExportOBJ("Output/TerrainN.obj", true);
     t.ExportIMG("Output/Terrain.png", true);
 
 	return 0;
