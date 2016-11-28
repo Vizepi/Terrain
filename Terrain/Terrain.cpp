@@ -57,8 +57,6 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 
 	//
 	// Generate each height
-	double minHeight = std::numeric_limits<double>().max();
-	double maxHeight = std::numeric_limits<double>().min();
 	for(uint64_t j = 0; j < m_resolution; ++j)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
@@ -75,27 +73,18 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 			{
 				h += (1.0 + perlin.Noise(Matrix2x2(M_PI  * rotations[octave] / 180.0) * Point2(i, j) * frequencies[octave] + offsets[octave])) * amplitudes[octave] / 2.0;
 			}
-			if(h < minHeight)
-			{
-				minHeight = h;
-			}
-			if(h > maxHeight)
-			{
-				maxHeight = h;
-			}
-		}
-	}
 
-	double height = maxHeight - minHeight;
-
-	//
-	// Rescale height
-	for(uint64_t j = 0; j < m_resolution; ++j)
-	{
-		for(uint64_t i = 0; i < m_resolution; ++i)
-		{
-			double& h = m_bufferRock[Index(i, j)];
-			h = (h - minHeight) / height;
+			//
+			// Clamp terrain and put value in range [0;1]
+			if(h < m_aabb.A().Z())
+			{
+				h = m_aabb.A().Z();
+			}
+			if(h > m_aabb.B().Z())
+			{
+				h = m_aabb.B().Z();
+			}
+			h = (h - m_aabb.A().Z()) / m_aabb.Size().Z();
 		}
 	}
 
@@ -121,9 +110,10 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
  * @brief Export the terrain in a .obj file.
  * @param filename Name of the obj file in which to export terrain.
  * @param exportNormals Set to true to export normals in the .obj.
+ * @param exportUV Export colors in .obj.
  * @return On success, returns true. If the file cannot be open, returns false.
  */
-bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
+bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals, bool exportUV)
 {
 	VERBOSE("Exporting OBJ");
 
@@ -133,6 +123,7 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 	file << "o terrain\ng height_map\n";
 	if(file.is_open())
 	{
+		double maxHeight = std::numeric_limits<double>().min();
 		//
 		// Save vertices
 		VERBOSE("\tVertices...");
@@ -142,8 +133,13 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 			{
 				Vector2 p = Point2(i, j);
 				uint64_t index = Index(i, j);
-                file << "v " << p.X() << " " << p.Y() << " " <<
-                        (m_bufferRock[index] + m_bufferDirt[index]) * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
+
+				double height = (m_bufferRock[index] + m_bufferDirt[index]);
+				file << "v " << p.X() << " " << p.Y() << " " << height * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
+				if(height > maxHeight)
+				{
+					maxHeight = height;
+				}
 			}
 		}
 		//
@@ -164,9 +160,19 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 				}
 			}
 		}
+		// Save UVs
+		if(exportUV)
+		{
+			VERBOSE("\tUVs...");
+			for(uint64_t i = 0; i < 256; ++i)
+			{
+				file << "vt 0.5 " << (i + 0.5) / 256.0 << "\n";
+			}
+		}
 		//
 		// Save faces
 		VERBOSE("\tFaces...");
+		char buffer[10];
 		for(uint64_t j = 1; j < m_resolution; ++j)
 		{
 			for(uint64_t i = 1; i < m_resolution; ++i)
@@ -175,23 +181,42 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals)
 				uint64_t b = i + j * m_resolution + 1 - m_resolution;
 				uint64_t c = i + 1 + (j + 1) * m_resolution - m_resolution;
 				uint64_t d = i + (j + 1) * m_resolution - m_resolution;
+				uint64_t n = j + i * m_resolution - m_resolution;;
 				if(exportNormals)
 				{
+					buffer[0] = 0;
+					if(exportUV)
+					{
+						sprintf(buffer, "%d", int((m_bufferRock[n] + m_bufferDirt[n]) * 255.0 / maxHeight) + 1);
+					}
 					//
 					// Save vertices and normals
-					file << "f " << a << "//" << a
-						 << " " << b << "//" << b
-						 << " " << c << "//" << c
-						 << " " << d << "//" << d << "\n";
+					file << "f " << a << "/" << buffer << "/" << a
+						 << " " << b << "/" << buffer << "/" << b
+						 << " " << c << "/" << buffer << "/" << c
+						 << " " << d << "/" << buffer << "/" << d << "\n";
 				}
 				else
 				{
-					//
-					// Save vertices
-					file << "f " << a
-						 << " " << b
-						 << " " << c
-						 << " " << d << "\n";
+					if(exportUV)
+					{
+						sprintf(buffer, "%d", int((m_bufferRock[n] + m_bufferDirt[n]) * 255.0 / maxHeight) + 1);
+						//
+						// Save vertices and UVs
+						file << "f " << a << "/" << buffer
+							 << " " << b << "/" << buffer
+							 << " " << c << "/" << buffer
+							 << " " << d << "/" << buffer << "\n";
+					}
+					else
+					{
+						//
+						// Save vertices
+						file << "f " << a
+							 << " " << b
+							 << " " << c
+							 << " " << d << "\n";
+					}
 				}
 			}
 		}
@@ -664,8 +689,7 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 	{
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
-			double& h = ridge[Index(i, j)];
-			h = 0.0;
+			double h = 0.0;
 
 			//
 			// Generate octaves and sums them
@@ -681,6 +705,7 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 			{
 				maxRidge = h;
 			}
+			ridge[Index(i, j)] = h;
 		}
 	}
 	double height = maxRidge - minRidge;
@@ -703,7 +728,6 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 
 			if(hRock2 > h)
 			{
-				//std::cout << h << std::endl;
 				hRock = (h + h - hRock2 - m_aabb.A().Z()) / m_aabb.Size().Z();
 			}
 		}
@@ -737,6 +761,58 @@ void Terrain::Gradient(void)
 
 			m_gradient[Index(i, j)] = Vector2(e - w, n - s);
 
+		}
+	}
+}
+
+/**
+ * @brief Add influence point on terrain.
+ * @param builder The terrain builder that contains influence points definition.
+ */
+void Terrain::Influence(const TerrainBuilder& builder)
+{
+	Vector2* ipPositions;
+	double* ipRadius;
+	uint64_t ipCount = builder.GetInfluencePointCount();
+	double minCoef = builder.GetMinPercentHeightCoef();
+	if(ipCount)
+	{
+		ipPositions = new Vector2[ipCount];
+		ipRadius = new double[ipCount];
+		for(uint64_t nIp = 0; nIp < ipCount; ++nIp)
+		{
+			builder.GetInfluencePoint(nIp, ipPositions[nIp], ipRadius[nIp]);
+		}
+
+		//
+		// Rescale height
+		for(uint64_t j = 0; j < m_resolution; ++j)
+		{
+			for(uint64_t i = 0; i < m_resolution; ++i)
+			{
+				double& h = m_bufferRock[Index(i, j)];
+
+				//
+				// Use influence points
+				double multiplier = 0.0;
+				for(uint64_t nIp = 0; nIp < ipCount; ++nIp)
+				{
+					double distance = (Point2(i, j) - ipPositions[nIp]).Length();
+					if(distance < ipRadius[nIp])
+					{
+						multiplier += (sin(M_PI * (distance / ipRadius[nIp] + 0.5)) / 2.0) + 0.5;
+						multiplier = fmin(multiplier, 1.0);
+					}
+				}
+				if(multiplier  != 0.0)
+				{
+					h *= multiplier * (1.0 - minCoef) + minCoef;
+				}
+				else
+				{
+					h *= minCoef;
+				}
+			}
 		}
 	}
 }

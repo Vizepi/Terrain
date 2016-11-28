@@ -16,7 +16,7 @@ public:
 
 	inline void		SetVerbose	(bool verbose) { m_verbose = verbose; }
 
-	bool			ExportOBJ	(const std::string& filename, bool exportNormals = false);
+	bool			ExportOBJ	(const std::string& filename, bool exportNormals = false, bool exportUV = false);
 	bool			ExportIMG	(const std::string& filename, bool doublePrecision);
 
 	void			Carve       (bool carveRock, bool carveDirt, double* rock, double* dirt, double* mask, uint64_t resolution, const Vector2& position, double scale = 1.0, double rotation = 0.0);
@@ -26,6 +26,7 @@ public:
     void			Erode       (uint64_t passCount, uint64_t passWaterCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle, double maxSedimentTransported);
 	void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude);
 	void			Gradient	(void);
+	void			Influence	(const TerrainBuilder& builder);
 
 	inline uint64_t	Index	(uint64_t x, uint64_t y) { return x * m_resolution + y; }
 	double			Height	(const Vector2& position);
