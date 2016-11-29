@@ -42,6 +42,7 @@ inline Vector2	operator+	(const Vector2& lhs, double rhs) { return Vector2(lhs.X
 inline Vector2	operator-	(const Vector2& lhs, double rhs) { return Vector2(lhs.X() - rhs, lhs.Y() - rhs); }
 inline Vector2	operator*	(const Vector2& lhs, double rhs) { return Vector2(lhs.X() * rhs, lhs.Y() * rhs); }
 inline Vector2	operator/	(const Vector2& lhs, double rhs) { return Vector2(lhs.X() / rhs, lhs.Y() / rhs); }
+inline bool		operator<	(const Vector2& lhs, const Vector2& rhs) { return lhs.X() < rhs.X() ? true : (lhs.X() == rhs.X() ? lhs.Y() < rhs.Y() : false); }
 
 class Vector3
 {
@@ -83,5 +84,6 @@ inline Vector3	operator+	(const Vector3& lhs, double rhs) { return Vector3(lhs.X
 inline Vector3	operator-	(const Vector3& lhs, double rhs) { return Vector3(lhs.X() - rhs, lhs.Y() - rhs, lhs.Z() - rhs); }
 inline Vector3	operator*	(const Vector3& lhs, double rhs) { return Vector3(lhs.X() * rhs, lhs.Y() * rhs, lhs.Z() * rhs); }
 inline Vector3	operator/	(const Vector3& lhs, double rhs) { return Vector3(lhs.X() / rhs, lhs.Y() / rhs, lhs.Z() / rhs); }
+inline bool		operator<	(const Vector3& lhs, const Vector3& rhs) { return lhs.X() < rhs.X() ? true : (lhs.X() == rhs.X() ? (lhs.Y() < rhs.Y() ? true : (lhs.Y() == rhs.Y() ? lhs.Z() < rhs.Z() : false)) : false); }
 
 #endif // VECTOR_H

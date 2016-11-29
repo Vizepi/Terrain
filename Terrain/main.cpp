@@ -28,6 +28,42 @@ int main(int argc, char *argv[])
 	t.Influence(builder);
 	t.Gradient();
 
+	//
+	// Adding vegetation
+	//
+	std::vector<Vector2> pineHeightCurve;
+		pineHeightCurve.push_back(Vector2(250.0, 0.0));
+		pineHeightCurve.push_back(Vector2(500.0, 1.0));
+		pineHeightCurve.push_back(Vector2(2000.0, 1.0));
+		pineHeightCurve.push_back(Vector2(3000.0, 0.0));
+	std::vector<Vector2> pineDirtCurve;
+		pineDirtCurve.push_back(Vector2(5.0, 0.0));
+		pineDirtCurve.push_back(Vector2(15.0, 1.0));
+	std::vector<Vector2> pineSlopeCurve;
+		pineSlopeCurve.push_back(Vector2(0.0, 1.0));
+		pineSlopeCurve.push_back(Vector2(0.1, 1.0));
+		pineSlopeCurve.push_back(Vector2(0.2, 0.0));
+
+	std::vector<Vector2> oakHeightCurve;
+		oakHeightCurve.push_back(Vector2(500.0, 0.0));
+		oakHeightCurve.push_back(Vector2(1250.0, 1.0));
+		oakHeightCurve.push_back(Vector2(2500.0, 0.0));
+	std::vector<Vector2> oakDirtCurve;
+		oakDirtCurve.push_back(Vector2(10.0, 0.0));
+		oakDirtCurve.push_back(Vector2(50.0, 1.0));
+	std::vector<Vector2> oakSlopeCurve;
+		oakSlopeCurve.push_back(Vector2(0.0, 1.0));
+		oakSlopeCurve.push_back(Vector2(0.05, 0.75));
+		oakSlopeCurve.push_back(Vector2(0.1, 0.0));
+
+	Tree::Builder treeBuilder;
+	treeBuilder.AddTree("Pine", pineHeightCurve, pineDirtCurve, pineSlopeCurve, 0.2, 0.4);
+	treeBuilder.AddTree("Oak", oakHeightCurve, oakDirtCurve, oakSlopeCurve, 0.3, 1.0);
+	treeBuilder.AddRule("Pine", "Oak", 0.0, 0.5);
+	//treeBuilder.useMinAsSurvivalRule = false;
+
+	t.AddVegetation(treeBuilder, 40000, 1000);
+
     //Erode(uint64_t assCOunt, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
 	//t.Erode(10000, 35, 10, 5, 10, 35);
 

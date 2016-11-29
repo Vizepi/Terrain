@@ -8,6 +8,9 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <list>
+#include <algorithm>
 
 #include <QImage>
 #include <QVector>
@@ -28,6 +31,7 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 	, m_gradient(nullptr)
 	, m_aabb(aabb)
 	, m_verbose(verbose)
+	, m_seed(seed)
 	, m_generator(seed)
 {
 	VERBOSE("Generating terrain");
@@ -41,6 +45,7 @@ Terrain::Terrain(const TerrainBuilder& builder, uint64_t resolution, const AABB3
 
 	//
 	// Create temporaries
+	ReSeed();
 	Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
 	uint64_t octaveCount = builder.GetOctaveCount();
 	double* frequencies = new double[octaveCount];
@@ -314,6 +319,79 @@ double Terrain::Height(const Vector2& position)
 }
 
 /**
+ * @brief Get the height of rock of the terrain at a given position.
+ * @param position Position where to get the height.
+ * @return Height of the terrain at the given position or 0.0 if position is out of the terrain space.
+ */
+double Terrain::HeightRock(const Vector2& position)
+{
+	double deltaX = m_aabb.Size().X();
+	double deltaY = m_aabb.Size().Y();
+	double u = (position.X() - m_aabb.A().X()) / deltaX;
+	double v = (position.Y() - m_aabb.A().Y()) / deltaY;
+
+	if(0.0 > u || 1.0 <= u || 0.0 > v || 1.0 <= v)
+	{
+		return 0.0;
+	}
+
+	uint64_t i = u * m_resolution;
+	uint64_t j = v * m_resolution;
+	double cu = ((position.X() - m_aabb.A().X()) - ((i * deltaX) / (m_resolution - 1))) / (deltaX / (m_resolution - 1));
+	double cv = ((position.Y() - m_aabb.A().Y()) - ((j * deltaY) / (m_resolution - 1))) / (deltaY / (m_resolution - 1));
+	return Bilinear(m_bufferRock, cu, cv, i, j) * m_aabb.Size().Z() + m_aabb.A().Z();
+}
+
+/**
+ * @brief Get the height of dirt of the terrain at a given position.
+ * @param position Position where to get the height.
+ * @return Height of the terrain at the given position or 0.0 if position is out of the terrain space.
+ */
+double Terrain::HeightDirt(const Vector2& position)
+{
+	double deltaX = m_aabb.Size().X();
+	double deltaY = m_aabb.Size().Y();
+	double u = (position.X() - m_aabb.A().X()) / deltaX;
+	double v = (position.Y() - m_aabb.A().Y()) / deltaY;
+
+	if(0.0 > u || 1.0 <= u || 0.0 > v || 1.0 <= v)
+	{
+		return 0.0;
+	}
+
+	uint64_t i = u * m_resolution;
+	uint64_t j = v * m_resolution;
+	double cu = ((position.X() - m_aabb.A().X()) - ((i * deltaX) / (m_resolution - 1))) / (deltaX / (m_resolution - 1));
+	double cv = ((position.Y() - m_aabb.A().Y()) - ((j * deltaY) / (m_resolution - 1))) / (deltaY / (m_resolution - 1));
+	return Bilinear(m_bufferDirt, cu, cv, i, j) * m_aabb.Size().Z();
+}
+
+/**
+ * @brief Get the slope of the terrain at a given position.
+ * @param position Position where to get the height.
+ * @return Slope from the gradient.
+ */
+double Terrain::Slope(const Vector2& position)
+{
+	double deltaX = m_aabb.Size().X();
+	double deltaY = m_aabb.Size().Y();
+	double u = (position.X() - m_aabb.A().X()) / deltaX;
+	double v = (position.Y() - m_aabb.A().Y()) / deltaY;
+
+	if(0.0 > u || 1.0 <= u || 0.0 > v || 1.0 <= v)
+	{
+		return 0.0;
+	}
+
+	uint64_t i = u * m_resolution;
+	uint64_t j = v * m_resolution;
+	double cu = ((position.X() - m_aabb.A().X()) - ((i * deltaX) / (m_resolution - 1))) / (deltaX / (m_resolution - 1));
+	double cv = ((position.Y() - m_aabb.A().Y()) - ((j * deltaY) / (m_resolution - 1))) / (deltaY / (m_resolution - 1));
+	Vector2 bilinear = Bilinear(m_gradient, cu, cv, i, j);
+	return bilinear.Length();
+}
+
+/**
  * @brief Get the position at a given index of the matrix.
  * @param x The column of the matrix.
  * @param y The line of the matrix.
@@ -456,7 +534,7 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
  * @param maxDrop
  * @param stoppingSpeed
  */
-void Terrain::Erode (uint64_t passCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle)
+void Terrain::Erode(uint64_t passCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle)
 {
     //
     // Get the gradient in each point
@@ -467,6 +545,7 @@ void Terrain::Erode (uint64_t passCount, double maxAngleForDirt, double maxDirtL
 	// Create random
 	std::uniform_int_distribution<uint64_t> rand_u64(0, m_resolution - 1);
 	std::uniform_real_distribution<double> rand_dbl(0.0, maxDrop - minDrop);
+	ReSeed();
 
     //
     // First generation
@@ -544,6 +623,7 @@ void Terrain::Ridge(const TerrainBuilder& builder, const Vector2& altitude)
 
 	//
 	// Create temporaries
+	ReSeed();
 	Perlin perlin(std::uniform_int_distribution<uint64_t>()(m_generator));
 	uint64_t octaveCount = builder.GetOctaveCount();
 	double* frequencies = new double[octaveCount];
@@ -695,6 +775,227 @@ void Terrain::Influence(const TerrainBuilder& builder)
 	}
 }
 
+void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, uint64_t lockBreak)
+{
+	VERBOSE("Adding vegetation");
+	std::vector<Tree::Instance> fullVegetation;
+	std::map<std::string, std::vector<Tree::Instance>> trees;
+	ReSeed();
+	std::uniform_real_distribution<double> randX(m_aabb.A().X(), m_aabb.B().X() - m_aabb.Size().X() / m_resolution);
+	std::uniform_real_distribution<double> randY(m_aabb.A().Y(), m_aabb.B().Y() - m_aabb.Size().Y() / m_resolution);
+	std::uniform_real_distribution<double> randA(0.0, 360.0);
+	std::uniform_real_distribution<double> randS(builder.survivalMinValue, builder.survivalMaxValue);
+
+	//
+	int count;
+	double accH = 0.0, accD = 0.0, accS = 0.0;
+	//
+	VERBOSE("\tGenerating layers...");
+	for(uint64_t tree = 0; tree < builder.trees.size(); ++tree)
+	{
+		trees[builder.trees[tree].GetName()] = std::vector<Tree::Instance>();
+		std::vector<Tree::Instance>& treeInstance = trees[builder.trees[tree].GetName()];
+		std::uniform_real_distribution<double> randR(builder.trees[tree].radiusMin, builder.trees[tree].radiusMax);
+
+		//
+		// Generate tree map
+		for(uint64_t pass = 0; pass < passCount; ++pass)
+		{
+			bool notPlaced = true;
+			uint64_t lockBreaker = 0;
+			Tree::Instance instance;
+			instance.rotation = randA(m_generator);
+			instance.name = builder.trees[tree].GetName();
+
+			//
+			// Try to place a tree
+			while(notPlaced && lockBreaker < lockBreak)
+			{
+				lockBreaker++;
+				notPlaced = false;
+				instance.position = Vector2(randX(m_generator), randY(m_generator));
+				instance.scale = randR(m_generator);
+				double squareRadius = instance.scale * instance.scale;
+
+				//
+				// Check if tree collides with other trees
+				for(uint64_t nTree = 0; nTree < treeInstance.size() && !notPlaced; ++nTree)
+				{
+					if((treeInstance[nTree].position - instance.position).SquareLength() <= squareRadius)
+					{
+						notPlaced = false;
+					}
+				}
+				if(!notPlaced)
+				{
+					treeInstance.push_back(instance);
+				}
+			}
+		}
+
+		//
+		// Check tree survival
+		for(int64_t pass = treeInstance.size()-1; pass >= 0; --pass)
+		{
+			double height = Height(treeInstance[pass].position);
+			double dirt = HeightDirt(treeInstance[pass].position);
+			double slope = Slope(treeInstance[pass].position);
+
+			double valueHeight = builder.trees[tree].heightCurve.Value(height);
+			double valueDirt = builder.trees[tree].dirtCurve.Value(dirt);
+			double valueSlope = builder.trees[tree].slopeCurve.Value(slope);
+			accH += valueHeight;
+			accD += valueDirt;
+			accS += valueSlope;
+			count++;
+
+			//
+			// Check if tree can survive regarding to its environment
+			bool canSurvive = true;
+			if(builder.useMinAsSurvivalRule)
+			{
+				canSurvive = 3.0 * randS(m_generator) < (valueHeight + valueDirt + valueSlope);
+			}
+			else
+			{
+				canSurvive = randS(m_generator) < (valueHeight * valueDirt * valueSlope);
+			}
+			if(canSurvive)
+			{
+				//
+				// Insert tree in vegetation
+				if(fullVegetation.empty())
+				{
+					fullVegetation.push_back(treeInstance[pass]);
+				}
+				else
+				{
+					fullVegetation.insert(std::upper_bound(fullVegetation.begin(), fullVegetation.end(), treeInstance[pass]), treeInstance[pass]);
+				}
+			}
+			else
+			{
+				treeInstance.erase(treeInstance.begin() + pass);
+			}
+		}
+	}
+	std::cout << accH / count << " " << accD / count << " " << accS / count << "\n";
+
+	VERBOSE("Merging layers...");
+
+	//
+	// While trees are colliding, perform selection
+	bool colliding = true;
+	while(colliding)
+	{
+		colliding = false;
+		std::list<Tree::Collision> collidingTrees;
+		uint64_t id = 0;
+
+		//
+		// For ecah tree, compute chances to survive against other trees
+		for(std::vector<Tree::Instance>::iterator it = fullVegetation.begin(); it != fullVegetation.end(); ++it)
+		{
+			Tree::Collision c;
+			c.instanceId = id;
+			c.count = 0;
+			c.probability = 0.0;
+
+			//
+			// Compute chance to survive against each tree colliding
+			for(std::vector<Tree::Instance>::iterator it2 = it+1; it2 != fullVegetation.end(); ++it2)
+			{
+				if((it->position - it2->position).Length() < (it->scale + it2->scale))
+				{
+					colliding = true;
+					c.count++;
+					double minP = 0.0, maxP = 0.0;
+					builder.GetRule(it->name, it2->name, minP, maxP);
+					c.probability += std::uniform_real_distribution<double>(minP, maxP)(m_generator);
+				}
+
+				//
+				// Not necessary to continue if trees are to far
+				if(fabs(it->position.X() - it2->position.X()) > (it->scale + it2->scale))
+				{
+					break;
+				}
+			}
+			if(c.count != 0)
+			{
+				c.probability /= double(c.count);
+				collidingTrees.insert(std::upper_bound(collidingTrees.begin(), collidingTrees.end(), c), c);
+			}
+			id++;
+		}
+
+		uint64_t treesToDeleteCount = builder.perPassTreeSelectionMinimal;
+		if(collidingTrees.size() > treesToDeleteCount)
+		{
+			treesToDeleteCount = collidingTrees.size() * builder.perPassTreeSelectionPercent;
+		}
+		std::list<uint64_t> ids;
+
+		//
+		// Remove last trees
+		for(std::list<Tree::Collision>::iterator it = collidingTrees.end(); it != collidingTrees.begin();)
+		{
+			--it;
+			ids.insert(std::upper_bound(ids.begin(), ids.end(), it->instanceId), it->instanceId);
+			treesToDeleteCount--;
+			if(treesToDeleteCount <= 0)
+			{
+				break;
+			}
+		}
+		ids.reverse();
+		for(std::list<uint64_t>::iterator it = ids.begin(); it != ids.end(); ++it)
+		{
+			fullVegetation.erase(fullVegetation.begin() + *it);
+		}
+	}
+
+	m_vegetation.clear();
+	for(std::vector<Tree::Instance>::iterator it = fullVegetation.begin(); it != fullVegetation.end(); ++it)
+	{
+		m_vegetation.push_back(*it);
+	}
+
+	//
+	// DEBUG
+	//
+	//
+	// Allocate images
+	QImage* veget = new QImage(m_resolution, m_resolution, QImage::Format_Indexed8);
+	QVector<QRgb> colorTable(256);
+	for(uint64_t i = 0; i < 256; ++i)
+	{
+		colorTable[i] = qRgb(i, 255-i, 0);
+	}
+	colorTable[0] = qRgb(0, 0, 0);
+	veget->setColorTable(colorTable);
+	veget->setColorCount(256);
+
+	//
+	// Copy pixels in the images
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			veget->setPixel(i, j, 0);
+		}
+	}
+	for(uint64_t i = 0; i < m_vegetation.size(); ++i)
+	{
+		veget->setPixel(m_resolution * (m_vegetation[i].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (m_vegetation[i].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), 255 * m_vegetation[i].scale);
+	}
+
+	//
+	// Save images, clean memory and return
+	veget->save("Output/veget.png");
+	delete veget;
+}
+
 /**
  * @brief Compute the bilinear interpolation of a point in a quad.
  * @param buffer The buffer in which to take the quad.
@@ -710,4 +1011,21 @@ double Terrain::Bilinear(double* buffer, double squarePositionX, double squarePo
 			squarePositionX *		(1 - squarePositionY) * buffer[Index(squareIndexI + 1, squareIndexJ)] +
 			squarePositionX *		squarePositionY *		buffer[Index(squareIndexI + 1, squareIndexJ + 1)] +
 			(1 - squarePositionX) * squarePositionY *		buffer[Index(squareIndexI, squareIndexJ + 1)];
+}
+
+/**
+ * @brief Compute the bilinear interpolation of a point in a quad.
+ * @param buffer The buffer in which to take the quad.
+ * @param squarePositionX The position X in the quad.
+ * @param squarePositionY The position Y in the quad.
+ * @param squareIndexI The index I of the quad.
+ * @param squareIndexJ The index J of the quad.
+ * @return Bilinear interpolation of (squarePositionX,squarePositionY) in quad (squareIndexI, squareIndexJ).
+ */
+Vector2 Terrain::Bilinear(Vector2* buffer, double squarePositionX, double squarePositionY, uint64_t squareIndexI, uint64_t squareIndexJ)
+{
+	return	buffer[Index(squareIndexI, squareIndexJ)] *			(1 - squarePositionX) * (1 - squarePositionY) +
+			buffer[Index(squareIndexI + 1, squareIndexJ)] *		squarePositionX *		(1 - squarePositionY) +
+			buffer[Index(squareIndexI + 1, squareIndexJ + 1)] * squarePositionX *		squarePositionY +
+			buffer[Index(squareIndexI, squareIndexJ + 1)] *		(1 - squarePositionX) * squarePositionY;
 }
