@@ -23,8 +23,15 @@ int main(int argc, char *argv[])
 	ridge.SetOctave(2, 1.0/100.0,		50,		Vector2(0.0, 0.0), 20.0);
 	ridge.SetOctave(3, 1.0/10.0,		10,		Vector2(0.0, 0.0), 40.0);
 
-	Terrain t(builder, 500, AABB3(Vector3(-2500, -2500, 500), Vector3(2500, 2500, 2300)), 666, true);
-	t.Ridge(ridge, Vector2(1800, 1400));
+
+	Terrain t(builder, 250, AABB3(Vector3(-5000, -5000, 1000), Vector3(5000, 5000, 3000)), 666, true);
+    t.Ridge(ridge, Vector2(2500, 2250));
+    t.Gradient();
+
+    //Erode(uint64_t passCOunt, double maxSlopeForDirt, double maxDirtLevelInPourcentage, double minDrop, double maxDrop, double stoppingSlope)
+    t.Erode(0, 0, 35, 1.0, 0.0, 1.0, 10, 1.0);
+
+	//t.Ridge(ridge, Vector2(1800, 1400));
 	t.Influence(builder);
 	t.Gradient();
 
@@ -57,18 +64,18 @@ int main(int argc, char *argv[])
 		oakSlopeCurve.push_back(Vector2(0.1, 0.0));
 
 	Tree::Builder treeBuilder;
-	treeBuilder.AddTree("Pine", pineHeightCurve, pineDirtCurve, pineSlopeCurve, 0.2, 0.4);
-	treeBuilder.AddTree("Oak", oakHeightCurve, oakDirtCurve, oakSlopeCurve, 0.3, 1.0);
+	treeBuilder.AddTree("Pine", pineHeightCurve, pineDirtCurve, pineSlopeCurve, 1.0, 3.0);
+	treeBuilder.AddTree("Oak", oakHeightCurve, oakDirtCurve, oakSlopeCurve, 1.0, 5.0);
 	treeBuilder.AddRule("Pine", "Oak", 0.0, 0.5);
 	//treeBuilder.useMinAsSurvivalRule = false;
 
-	t.AddVegetation(treeBuilder, 40000, 1000);
+	t.AddVegetation(treeBuilder, 10000, 1000);
 
     //Erode(uint64_t assCOunt, double maxSlopeForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingSlope)
 	//t.Erode(10000, 35, 10, 5, 10, 35);
 
 	//t.ExportOBJ("Output/Terrain.obj", false);
-	t.ExportOBJ("Output/TerrainN.obj", true, true);
+	t.ExportOBJ("Output/TerrainN.obj", true);
 	t.ExportIMG("Output/Terrain.png", false);
 
 	return 0;

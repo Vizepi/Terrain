@@ -138,6 +138,7 @@ bool Terrain::ExportOBJ(const std::string& filename, bool exportNormals, bool ex
 			{
 				Vector2 p = Point2(i, j);
 				uint64_t index = Index(i, j);
+
 				double height = (m_bufferRock[index] + m_bufferDirt[index]);
 				file << "v " << p.X() << " " << p.Y() << " " << height * m_aabb.Size().Z() + m_aabb.A().Z() << "\n";
 				if(height > maxHeight)
@@ -315,7 +316,7 @@ double Terrain::Height(const Vector2& position)
 	uint64_t j = v * m_resolution;
 	double cu = ((position.X() - m_aabb.A().X()) - ((i * deltaX) / (m_resolution - 1))) / (deltaX / (m_resolution - 1));
 	double cv = ((position.Y() - m_aabb.A().Y()) - ((j * deltaY) / (m_resolution - 1))) / (deltaY / (m_resolution - 1));
-	return (Bilinear(m_bufferRock, cu, cv, i, j) + Bilinear(m_bufferDirt, cu, cv, i, j)) * m_aabb.Size().Z() + m_aabb.A().Z();
+    return (Bilinear(m_bufferRock, cu, cv, i, j)) /*+ Bilinear(m_bufferDirt, cu, cv, i, j))*/ * m_aabb.Size().Z() + m_aabb.A().Z();
 }
 
 /**
@@ -453,7 +454,7 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
 {
     //
     // Get the gradient at the current position
-    Vector2 grad = m_gradient[Index(crtPos.X(), crtPos.Y())];
+    /*Vector2 grad = m_gradient[Index(crtPos.X(), crtPos.Y())];
     grad.Normalize();
     double angle = DotProduct(Vector2(1.0, 0.0), grad);
 
@@ -465,7 +466,7 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
     // Find the next position
     if(angle > M_PI/6.0 && angle < (5*M_PI)/6.0)
     {
-       nextPos->SetY(crtPos.Y()+1);
+        nextPos->SetY(crtPos.Y()+1);
     }
     else if(angle > (7*M_PI)/6.0 && angle < (11*M_PI)/6.0)
     {
@@ -481,26 +482,46 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
         nextPos->SetX(crtPos.X()-1);
     }
 
-    if(nextPos->Y() < 0)
-    {
-        nextPos->SetY(0);
-    }
-    else if(nextPos->Y() >= m_resolution)
-    {
-        nextPos->SetY(m_resolution-1);
-    }
-    if(nextPos->X() < 0)
-    {
-        nextPos->SetX(0);
-    }
-    else if(nextPos->X() >= m_resolution)
-    {
-        nextPos->SetX(m_resolution-1);
-    }
+    double height = std::abs(Height(crtPos) - Height(*nextPos));*/
 
+    nextPos->SetX(crtPos.X());
+    nextPos->SetY(crtPos.Y());
+    double squarelength = m_aabb.Size().X()/(double)m_resolution;
+
+    double maxHeight = 0;
+    double height = 0;
+    for(int crtX = -1; crtX <= 1; ++crtX)
+    {
+        if(crtPos.X()+crtX > 0 && crtPos.X()+crtX < m_resolution)
+        {
+            for(int crtY = -1; crtY <= 1; ++crtY)
+            {
+                if(crtPos.Y()+crtY > 0 && crtPos.Y()+crtY < m_resolution && !(crtX == 0 && crtY ==0))
+                {
+                    //height = Height(crtPos) - Height(Vector2(crtPos.X()+crtX, crtPos.Y()+crtY));//m_bufferRock[Index(crtPos.X(), crtPos.X())] - m_bufferRock[Index(crtPos.X()+crtX, crtPos.X()+crtY)];
+                    double hcrt = m_bufferRock[Index(crtPos.X(), crtPos.Y())] * m_aabb.Size().Z() + m_aabb.A().Z();
+                    double hnext = m_bufferRock[Index(crtPos.X()+crtX, crtPos.Y()+crtY)] * m_aabb.Size().Z() + m_aabb.A().Z();
+                    height = hcrt-hnext;
+                    if(height > maxHeight)
+                    {
+                        nextPos->SetX(crtPos.X()+crtX);
+                        nextPos->SetY(crtPos.Y()+crtY);
+                        maxHeight = height;
+                    }
+                }
+            }
+        }
+    }
+    height = maxHeight;
+    //VERBOSE(height);
     //
     // Compute the slope angle
-    double height = std::max(Height(*nextPos) - Height(crtPos), 0.0);
+    /*//VERBOSE("\nheight bef = " << height);
+    height *= m_aabb.Size().Z() + m_aabb.A().Z();
+    //VERBOSE("height 2  = " << height);
+    height = std::max(height, 0.0);
+    //VERBOSE("height = " << height);*/
+
     double length;
     if(nextPos->X() != crtPos.X() && nextPos->Y() != crtPos.Y())
     {
@@ -511,11 +532,57 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
         length = squarelength;
     }
     double angleRes = atan(height/length)*180.0/M_PI;
-    /*VERBOSE("ANGLE = " << angleRes);
+    /*VERBOSE("\nANGLE = " << angleRes);
     VERBOSE("height = " << height);
-    VERBOSE("length = " << length);*/
-    /*VERBOSE("Height(*nextPos) = " << Height(*nextPos));
+    VERBOSE("length = " << length);
+    VERBOSE("Height(*nextPos) = " << Height(*nextPos));
     VERBOSE("Height(crtPos) = " << Height(crtPos));*/
+    return angleRes;
+}
+
+double Terrain::GetMaxSlopeWithDirt(const Vector2& crtPos, Vector2* nextPos)
+{
+    nextPos->SetX(crtPos.X());
+    nextPos->SetY(crtPos.Y());
+    double squarelength = m_aabb.Size().X()/(double)m_resolution;
+
+    double maxHeight = 0;
+    double height = 0;
+    for(int crtX = -1; crtX <= 1; ++crtX)
+    {
+        if(crtPos.X()+crtX > 0 && crtPos.X()+crtX < m_resolution)
+        {
+            for(int crtY = -1; crtY <= 1; ++crtY)
+            {
+                if(crtPos.Y()+crtY > 0 && crtPos.Y()+crtY < m_resolution && !(crtX == 0 && crtY ==0))
+                {
+                    double hcrt = (m_bufferRock[Index(crtPos.X(), crtPos.Y())] + m_bufferDirt[Index(crtPos.X(), crtPos.Y())])
+                            * m_aabb.Size().Z() + m_aabb.A().Z();
+                    double hnext = (m_bufferRock[Index(crtPos.X()+crtX, crtPos.Y()+crtY)] + m_bufferDirt[Index(crtPos.X()+crtX, crtPos.Y()+crtY)])
+                            * m_aabb.Size().Z() + m_aabb.A().Z();
+                    height = hcrt-hnext;
+                    if(height > maxHeight)
+                    {
+                        nextPos->SetX(crtPos.X()+crtX);
+                        nextPos->SetY(crtPos.Y()+crtY);
+                        maxHeight = height;
+                    }
+                }
+            }
+        }
+    }
+    height = maxHeight;
+
+    double length;
+    if(nextPos->X() != crtPos.X() && nextPos->Y() != crtPos.Y())
+    {
+        length = sqrt(squarelength*squarelength*2);
+    }
+    else
+    {
+        length = squarelength;
+    }
+    double angleRes = atan(height/length)*180.0/M_PI;
     return angleRes;
 }
 
@@ -527,14 +594,14 @@ double Terrain::GetMaxSlope(const Vector2& crtPos, Vector2* nextPos)
 // TODO Use a better slope system
 /**
  * @brief Terrain::Erode
- * @param passCount
- * @param maxSlopeForDirt
- * @param maxDirtLevel
- * @param minDrop
- * @param maxDrop
- * @param stoppingSpeed
+ * @param passCount Number of iterations for the ersion process
+ * @param maxAngleForDirt the maximum angle in degree where we can put dirt
+ * @param maxDirtLevel The maximum level of dirt in one position at the first iteration. In %
+ * @param minDrop The minimum dirt Tear off level
+ * @param maxDrop The maximum dirt Tear off level
+ * @param stoppingAngle The angle at wich the falling rock stop
  */
-void Terrain::Erode(uint64_t passCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle)
+void Terrain::Erode (uint64_t passCount, uint64_t passWaterCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle, double maxSedimentTransported)
 {
     //
     // Get the gradient in each point
@@ -544,12 +611,13 @@ void Terrain::Erode(uint64_t passCount, double maxAngleForDirt, double maxDirtLe
 	//
 	// Create random
 	std::uniform_int_distribution<uint64_t> rand_u64(0, m_resolution - 1);
-	std::uniform_real_distribution<double> rand_dbl(0.0, maxDrop - minDrop);
+	std::uniform_real_distribution<double> rand_dbl(minDrop/100.0, maxDrop/100.0);
 	ReSeed();
 
     //
     // First generation
     Vector2* tmpVec2 = new Vector2();
+
     for(uint i = 0; i < m_resolution; ++i)
     {
         for(uint j = 0; j < m_resolution; ++j)
@@ -563,30 +631,34 @@ void Terrain::Erode(uint64_t passCount, double maxAngleForDirt, double maxDirtLe
             double dirtFade = 1.0 - std::min(angleSlope/maxAngleForDirt, 1.0);
             double dirtLevel = maxDirtLevel * dirtFade;
             dirtLevel = dirtLevel;
-            VERBOSE("dirtLevel = " << dirtLevel)
-            m_bufferDirt[Index(i, j)] = dirtLevel;
+            m_bufferDirt[Index(i, j)] = dirtLevel/100.0;//dirtLevel/100.0;
         }
     }
     VERBOSE("First level of dirt added");
 
     //
     // Simulation loop drop passCount rock
-    /*for(uint64_t nPass = 0; nPass < passCount; nPass++)
+    for(uint64_t nPass = 0; nPass < passCount; nPass++)
     {
         //
         // Choose a random position
 		int x = rand_u64(m_generator);
 		int y = rand_u64(m_generator);
+
         //
         // Compute the level of rock falling
         // TODO change ?
-		double fallingRock = rand_dbl(m_generator) + minDrop;
+        double fallingRock = rand_dbl(m_generator);
         double crtDirt = m_bufferDirt[Index(x, y)];
-        fallingRock = std::max(fallingRock, crtDirt);
+        //fallingRock = std::max(fallingRock, crtDirt);
 
         //
         // Tear off the rock
-        m_bufferDirt[Index(x, y)] = crtDirt - fallingRock;
+        m_bufferDirt[Index(x, y)] = std::max(crtDirt - fallingRock, 0.0);
+        if(m_bufferDirt[Index(x, y)] == 0)
+        {
+            m_bufferRock[Index(x, y)] = m_bufferRock[Index(x, y)] - (fallingRock - crtDirt);
+        }
 
         //
         // Make the rock fall
@@ -595,7 +667,7 @@ void Terrain::Erode(uint64_t passCount, double maxAngleForDirt, double maxDirtLe
         {
             //
             // Compute the new position
-            double angleSlope = GetMaxSlope(Vector2(x, y), tmpVec2);
+            double angleSlope = GetMaxSlopeWithDirt(Vector2(x, y), tmpVec2);
 
             //
             //Check the stopping state
@@ -609,6 +681,56 @@ void Terrain::Erode(uint64_t passCount, double maxAngleForDirt, double maxDirtLe
                 y = tmpVec2->Y();
             }
         }
+        m_bufferDirt[Index(x, y)] = m_bufferDirt[Index(x, y)] + fallingRock;
+    }
+    /*
+    //
+    // Water Erosion
+    for(uint64_t nPassWater = 0; nPassWater < passWaterCount; nPassWater++)
+    {
+        //
+        // Choose a random position
+        int x = rand_u64(m_generator);
+        int y = rand_u64(m_generator);
+
+        //
+        // Compute the level of sediment transported
+        double fallingSediment = rand_dbl(m_generator);
+        double crtDirt = m_bufferDirt[Index(x, y)];
+        double crtDirtTransported = std::max(std::max(crtDirt, fallingSediment), maxSedimentTransported);
+        //
+        // Tear off the first level of sediment
+        m_bufferDirt[Index(x, y)] = m_bufferDirt[Index(x, y)] - crtDirtTransported;
+
+        //
+        // Make the sediment fall
+        bool stoped = false;
+        while(!stoped)
+        {
+            //
+            // Compute the new position
+            double angleSlope = GetMaxSlopeWithDirt(Vector2(x, y), tmpVec2);
+
+            //
+            //Check the stopping state
+            if(angleSlope <= stoppingAngle)
+            {
+                stoped = true;
+            }
+            else
+            {
+                x = tmpVec2->X();
+                y = tmpVec2->Y();
+                crtDirt = m_bufferDirt[Index(x, y)];
+                double NcrtDirtTransported = std::max(crtDirtTransported + std::max(crtDirt, fallingSediment), maxSedimentTransported);
+                m_bufferDirt[Index(x, y)] = m_bufferDirt[Index(x, y)] - (NcrtDirtTransported - crtDirtTransported);
+                crtDirtTransported = NcrtDirtTransported;
+                //
+                // get sediment depending of the slop.
+                //m_bufferDirt[Index(x, y)] = 1.0 - (angleSlope/stoppingAngle) * crtDirtTransported;
+            }
+        }
+        m_bufferDirt[Index(x, y)] = m_bufferDirt[Index(x, y)] + crtDirtTransported;
     }*/
 }
 
@@ -710,12 +832,12 @@ void Terrain::Gradient(void)
 		int64_t jp = int64_t(j)+1, jm = int64_t(j)-1;
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
-			double point = m_bufferRock[Index(i, j)] + m_bufferDirt[Index(i, j)];
+            double point = m_bufferRock[Index(i, j)] + m_bufferDirt[Index(i, j)];
 			int64_t ip = int64_t(i)+1, im = int64_t(i)-1;
-			double s = (jm >= 0 ?			m_bufferRock[Index(i, jm)] + m_bufferDirt[Index(i, jm)] : point + point - (m_bufferRock[Index(i, jp)] + m_bufferDirt[Index(i, jp)]));
-			double n = (jp < m_resolution ? m_bufferRock[Index(i, jp)] + m_bufferDirt[Index(i, jp)] : point + point - (m_bufferRock[Index(i, jm)] + m_bufferDirt[Index(i, jm)]));
-			double w = (im >= 0 ?			m_bufferRock[Index(im, j)] + m_bufferDirt[Index(im, j)] : point + point - (m_bufferRock[Index(ip, j)] + m_bufferDirt[Index(ip, j)]));
-			double e = (ip < m_resolution ? m_bufferRock[Index(ip, j)] + m_bufferDirt[Index(ip, j)] : point + point - (m_bufferRock[Index(im, j)] + m_bufferDirt[Index(im, j)]));
+            double s = (jm >= 0 ?			m_bufferRock[Index(i, jm)] + m_bufferDirt[Index(i, jm)] : point + point - (m_bufferRock[Index(i, jp)] + m_bufferDirt[Index(i, jp)]));
+            double n = (jp < m_resolution ? m_bufferRock[Index(i, jp)] + m_bufferDirt[Index(i, jp)] : point + point - (m_bufferRock[Index(i, jm)] + m_bufferDirt[Index(i, jm)]));
+            double w = (im >= 0 ?			m_bufferRock[Index(im, j)] + m_bufferDirt[Index(im, j)] : point + point - (m_bufferRock[Index(ip, j)] + m_bufferDirt[Index(ip, j)]));
+            double e = (ip < m_resolution ? m_bufferRock[Index(ip, j)] + m_bufferDirt[Index(ip, j)] : point + point - (m_bufferRock[Index(im, j)] + m_bufferDirt[Index(im, j)]));
 
 			m_gradient[Index(i, j)] = Vector2(e - w, n - s);
 
@@ -987,7 +1109,7 @@ void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, ui
 	}
 	for(uint64_t i = 0; i < m_vegetation.size(); ++i)
 	{
-		veget->setPixel(m_resolution * (m_vegetation[i].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (m_vegetation[i].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), 255 * m_vegetation[i].scale);
+		veget->setPixel(m_resolution * (m_vegetation[i].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (m_vegetation[i].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), 51.0 * m_vegetation[i].scale);
 	}
 
 	//
