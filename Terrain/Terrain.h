@@ -38,6 +38,8 @@ public:
 	Vector2			Point2				(uint64_t x, uint64_t y);
 	Vector3			Point3				(uint64_t x, uint64_t y);
 
+	uint64_t		GetSeed				(void) const { return m_seed; }
+
 private:
 
 	double			Bilinear			(double* buffer, double squarePositionX, double squarePositionY, uint64_t squareIndexI, uint64_t squareIndexJ);

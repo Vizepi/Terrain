@@ -911,6 +911,44 @@ void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, ui
 	//
 	int count;
 	double accH = 0.0, accD = 0.0, accS = 0.0;
+	double minH = 10000000.0, minD = 100000000.0, minS = 1000000000.0;
+	double maxH = -1000000000000.0, maxD = -10000000000000000.0, maxS = -10000000000.0;
+	QImage* veget1 = new QImage(m_resolution, m_resolution, QImage::Format_Indexed8);
+	QImage* veget2 = new QImage(m_resolution, m_resolution, QImage::Format_Indexed8);
+	QImage* veget3 = new QImage(m_resolution, m_resolution, QImage::Format_Indexed8);
+	QVector<QRgb> colorTable(256);
+	for(uint64_t i = 0; i < 256; ++i)
+	{
+		colorTable[i] = qRgb(i, 255-i, 0);
+	}
+	colorTable[0] = qRgb(0, 0, 0);
+	veget1->setColorTable(colorTable);
+	veget1->setColorCount(256);
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			veget1->setPixel(i, j, 0);
+		}
+	}
+	veget2->setColorTable(colorTable);
+	veget2->setColorCount(256);
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			veget2->setPixel(i, j, 0);
+		}
+	}
+	veget3->setColorTable(colorTable);
+	veget3->setColorCount(256);
+	for(uint64_t j = 0; j < m_resolution; ++j)
+	{
+		for(uint64_t i = 0; i < m_resolution; ++i)
+		{
+			veget3->setPixel(i, j, 0);
+		}
+	}
 	//
 	VERBOSE("\tGenerating layers...");
 	for(uint64_t tree = 0; tree < builder.trees.size(); ++tree)
@@ -969,6 +1007,15 @@ void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, ui
 			accH += valueHeight;
 			accD += valueDirt;
 			accS += valueSlope;
+			minH = fmin(minH, valueHeight);
+			minD = fmin(minD, valueDirt);
+			minS = fmin(minS, valueSlope);
+			maxH = fmax(maxH, valueHeight);
+			maxD = fmax(maxD, valueDirt);
+			maxS = fmax(maxS, valueSlope);
+			veget1->setPixel(m_resolution * (treeInstance[pass].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (treeInstance[pass].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), valueHeight * 255);
+			veget2->setPixel(m_resolution * (treeInstance[pass].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (treeInstance[pass].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), valueDirt * 255);
+			veget3->setPixel(m_resolution * (treeInstance[pass].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (treeInstance[pass].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), valueSlope * 255);
 			count++;
 
 			//
@@ -1002,6 +1049,14 @@ void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, ui
 		}
 	}
 	std::cout << accH / count << " " << accD / count << " " << accS / count << "\n";
+	std::cout << minH << " " << minD << " " << minS << "\n";
+	std::cout << maxH << " " << maxD << " " << maxS << "\n";
+	veget1->save("Output/veget1.png");
+	delete veget1;
+	veget2->save("Output/veget2.png");
+	delete veget2;
+	veget3->save("Output/veget3.png");
+	delete veget3;
 
 	VERBOSE("Merging layers...");
 
@@ -1089,12 +1144,12 @@ void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, ui
 	//
 	// Allocate images
 	QImage* veget = new QImage(m_resolution, m_resolution, QImage::Format_Indexed8);
-	QVector<QRgb> colorTable(256);
+	/*QVector<QRgb> colorTable(256);
 	for(uint64_t i = 0; i < 256; ++i)
 	{
 		colorTable[i] = qRgb(i, 255-i, 0);
 	}
-	colorTable[0] = qRgb(0, 0, 0);
+	colorTable[0] = qRgb(0, 0, 0);*/
 	veget->setColorTable(colorTable);
 	veget->setColorCount(256);
 
@@ -1107,10 +1162,29 @@ void Terrain::AddVegetation(const Tree::Builder& builder, uint64_t passCount, ui
 			veget->setPixel(i, j, 0);
 		}
 	}
+	//
+	// Create output file
+	std::ofstream bytes("Output/veget.bytes", std::ios::out | std::ios::binary);
+	uint64_t countTree = 2;
+	bytes.write((char*)(&countTree), sizeof(uint64_t));
+	countTree = m_vegetation.size();
+	bytes.write((char*)(&countTree), sizeof(uint64_t));
+
 	for(uint64_t i = 0; i < m_vegetation.size(); ++i)
 	{
-		veget->setPixel(m_resolution * (m_vegetation[i].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (m_vegetation[i].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), 51.0 * m_vegetation[i].scale);
+		uint64_t oak = m_vegetation[i].name == "Oak";
+		bytes.write((char*)(&oak), sizeof(uint64_t));
+		double tmp = m_vegetation[i].position.X();
+		bytes.write((const char*)&tmp, sizeof(double));
+		tmp = m_vegetation[i].position.Y();
+		bytes.write((char*)&tmp, sizeof(double));
+		tmp = Height(m_vegetation[i].position);
+		bytes.write((char*)&tmp, sizeof(double));
+		bytes.write((char*)&m_vegetation[i].rotation, sizeof(double));
+		bytes.write((char*)&m_vegetation[i].scale, sizeof(double));
+		veget->setPixel(m_resolution * (m_vegetation[i].position.X() - m_aabb.A().X()) / m_aabb.Size().X(), m_resolution * (m_vegetation[i].position.Y() - m_aabb.A().Y()) / m_aabb.Size().Y(), m_vegetation[i].name == "Pine" ? 255 : 1);
 	}
+	bytes.close();
 
 	//
 	// Save images, clean memory and return
