@@ -27,6 +27,7 @@ public:
 	void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude);
 	void			Gradient	(void);
 	void			Influence	(const TerrainBuilder& builder);
+    void            DirtSmooth  (void);
 
 	inline uint64_t	Index	(uint64_t x, uint64_t y) { return x * m_resolution + y; }
 	double			Height	(const Vector2& position);
