@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
 	t.Ridge(ridge, Vector2(3250, 2250));
 	t.Influence(builder);
 	t.Gradient();
-    t.Erode(500000, 0, 25, 1.0, 0.1, 0.2, 20, 1.0);
+	t.Erode(100000,25, 1.0, 0.1, 0.2, 20);
 
 	t.Gradient();
 
@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 	t.Ridge(ridge, Vector2(3250, 2250));
 	t.Influence(builder);
 	t.Gradient();
-	t.Erode(1000000, 0, 25, 1.0, 0.1, 0.2, 20, 1.0);
+	t.Erode(1000000, 25, 1.0, 0.1, 0.2, 20);
 	//t.Gradient();
 	t.ExportOBJ("Output/TerrainN.obj", true, true);
 
