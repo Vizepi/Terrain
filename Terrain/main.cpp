@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     t.Gradient();
 
     //Erode(uint64_t passCOunt, double maxSlopeForDirt, double maxDirtLevelInPourcentage, double minDrop, double maxDrop, double stoppingSlope)
-    t.Erode(500000, 0, 25, 1.0, 0.1, 0.2, 20, 1.0);
+    t.Erode(100000, 25, 1.0, 0.1, 0.2, 20);
 
     t.Ridge(ridge, Vector2(2700, 2400));
 	t.Gradient();

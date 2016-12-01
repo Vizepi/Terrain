@@ -23,7 +23,7 @@ public:
 	double          GetMaxSlope (const Vector2& crtPos, Vector2* nextPos);
     double          GetMaxSlopeWithDirt(const Vector2& crtPos, Vector2* nextPos);
 
-    void			Erode       (uint64_t passCount, uint64_t passWaterCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle, double maxSedimentTransported);
+    void			Erode       (uint64_t passCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle);
 	void			Ridge       (const TerrainBuilder& builder, const Vector2& altitude);
 	void			Gradient	(void);
 	void			Influence	(const TerrainBuilder& builder);

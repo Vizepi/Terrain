@@ -270,7 +270,7 @@ bool Terrain::ExportIMG(const std::string& filename, bool doublePrecision)
 		for(uint64_t i = 0; i < m_resolution; ++i)
 		{
 			rock->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferRock[Index(i, j)])) * (doublePrecision ? 0xffff : 0xff)));
-			dirt->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferDirt[Index(i, j)])) * (doublePrecision ? 0xffff : 0xff)));
+            dirt->setPixel(i, j, int(fmin(1.0, fmax(0.0, m_bufferDirt[Index(i, j)] * 10)) * (doublePrecision ? 0xffff : 0xff)));
 		}
 	}
 
@@ -503,14 +503,14 @@ double Terrain::GetMaxSlopeWithDirt(const Vector2& crtPos, Vector2* nextPos)
 // TODO Use a better slope system
 /**
  * @brief Terrain::Erode
- * @param passCount Number of iterations for the ersion process
+ * @param passCount Number of iterations for the erosion process
  * @param maxAngleForDirt the maximum angle in degree where we can put dirt
- * @param maxDirtLevel The maximum level of dirt in one position at the first iteration. In %
+ * @param maxDirtLevel The maximum level of dirt in one position at the first iteration. In percentage of the height.
  * @param minDrop The minimum dirt Tear off level
  * @param maxDrop The maximum dirt Tear off level
  * @param stoppingAngle The angle at wich the falling rock stop
  */
-void Terrain::Erode (uint64_t passCount, uint64_t passWaterCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle, double maxSedimentTransported)
+void Terrain::Erode (uint64_t passCount, double maxAngleForDirt, double maxDirtLevel, double minDrop, double maxDrop, double stoppingAngle)
 {
     //
     // Get the gradient in each point
@@ -547,6 +547,7 @@ void Terrain::Erode (uint64_t passCount, uint64_t passWaterCount, double maxAngl
     DirtSmooth();
     VERBOSE("First level of dirt smoothed");
 
+    VERBOSE("Erosion started");
     //
     // Simulation loop drop passCount rock
     for(uint64_t nPass = 0; nPass < passCount; nPass++)
@@ -595,7 +596,9 @@ void Terrain::Erode (uint64_t passCount, uint64_t passWaterCount, double maxAngl
         m_bufferDirt[Index(x, y)] = m_bufferDirt[Index(x, y)] + fallingRock;
     }
     DirtSmooth();
+    VERBOSE("Erosion finished and smoothed");
 
+/* Water erosion unfinished
     //
     // Water Erosion
     for(uint64_t nPassWater = 0; nPassWater < passWaterCount; nPassWater++)
@@ -611,7 +614,7 @@ void Terrain::Erode (uint64_t passCount, uint64_t passWaterCount, double maxAngl
 
 
         /*double crtDirt = m_bufferDirt[Index(x, y)];
-        double crtDirtTransported = std::max(std::max(crtDirt, fallingSediment), maxSedimentTransported);*/
+        double crtDirtTransported = std::max(std::max(crtDirt, fallingSediment), maxSedimentTransported);
 
         //
         // Tear off the first level of sediment
@@ -656,6 +659,7 @@ void Terrain::Erode (uint64_t passCount, uint64_t passWaterCount, double maxAngl
         m_bufferDirt[Index(x, y)] = m_bufferDirt[Index(x, y)] + fallingSediment;
     }
     DirtSmooth();
+    */
 }
 
 void Terrain::DirtSmooth()
